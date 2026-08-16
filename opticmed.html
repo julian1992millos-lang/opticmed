@@ -199,8 +199,8 @@
     /* DISTANCE BADGE */
     @keyframes pulse-badge{0%,100%{opacity:1}50%{opacity:.6}}
     #dist-badge{position:absolute;left:50%;transform:translateX(-50%);
-      bottom:calc(10px + var(--sb));z-index:25;border-radius:20px;
-      padding:9px 22px;font-size:13px;font-weight:700;pointer-events:none;
+      top:calc(96px + var(--st));z-index:25;border-radius:20px;
+      padding:7px 18px;font-size:12px;font-weight:700;pointer-events:none;
       white-space:nowrap;display:none;text-align:center;transition:all .3s}
     #dist-badge.dist-ok {background:rgba(6,214,160,.2);border:2px solid #06d6a0;color:#06d6a0}
     #dist-badge.dist-near{background:rgba(239,71,111,.15);border:2px solid #ef476f;color:#ef476f;
@@ -1313,6 +1313,11 @@ function updateMarkBtn() {
 }
 function markDone() {
   S.result.date = new Date().toISOString();
+  // Si se acaba de agregar altura, habilitar re-guardado
+  if (S.markMode === 'height') {
+    S.saved = false;
+    S.heightMode = null; // limpiar para próxima medición
+  }
   go('s-results');
 }
 
@@ -1493,9 +1498,10 @@ function closeHeightModal() {
 }
 function startHeightMeasurement(type) {
   closeHeightModal();
-  S.heightMode = type;
-  S.camMode    = 'front';
-  S.measureMode = S.aiReady ? 'ai' : 'manual';
+  S.heightMode  = type;
+  S.camMode     = 'front';
+  S.measureMode = 'manual'; // SIEMPRE manual: la altura requiere marcar puntos
+  if (!S.result) S.result = makeResult();
   go('s-cam');
   updateModeBtns();
   startCam();
