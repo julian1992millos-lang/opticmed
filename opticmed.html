@@ -196,6 +196,1594 @@
                background:linear-gradient(90deg,transparent,var(--acc),transparent);
                animation:scan 2s ease-in-out infinite;pointer-events:none;z-index:10;
                box-shadow:0 0 10px rgba(0,198,224,.6)}
+    /* DISTANCE BADGE */
+    @keyframes pulse-badge{0%,100%{opacity:1}50%{opacity:.6}}
+    #dist-badge{position:absolute;left:50%;transform:translateX(-50%);
+      bottom:calc(10px + var(--sb));z-index:25;border-radius:20px;
+      padding:9px 22px;font-size:13px;font-weight:700;pointer-events:none;
+      white-space:nowrap;display:none;text-align:center;transition:all .3s}
+    #dist-badge.dist-ok {background:rgba(6,214,160,.2);border:2px solid #06d6a0;color:#06d6a0}
+    #dist-badge.dist-near{background:rgba(239,71,111,.15);border:2px solid #ef476f;color:#ef476f;
+      animation:pulse-badge 1s ease-in-out infinite}
+    #dist-badge.dist-far {background:rgba(255,209,102,.15);border:2px solid #ffd166;color:#ffd166;
+      animation:pulse-badge 1s ease-in-out infinite}
+    /* HEIGHT MODAL */
+    #htype-modal{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.75);
+      display:none;align-items:flex-end;justify-content:center}
+    #htype-modal.open{display:flex}
+    .hmodal-box{background:var(--bg2);border-radius:20px 20px 0 0;width:100%;
+      padding:20px 16px;padding-bottom:calc(20px + var(--sb));max-width:480px;
+      border-top:1px solid var(--bdr)}
+    .hmodal-box h3{font-size:17px;font-weight:800;margin-bottom:5px;text-align:center}
+    .hmodal-box .hm-sub{font-size:13px;color:var(--mut);margin-bottom:16px;
+      text-align:center;line-height:1.5}
+    .hopt{display:flex;flex-direction:column;gap:10px}
+    .hopt-btn{padding:14px 16px;border-radius:12px;border:1px solid var(--bdr);
+      background:var(--card);color:var(--txt);cursor:pointer;text-align:left;width:100%}
+    .hopt-btn:active{background:var(--bg)}
+    .hopt-title{font-size:15px;font-weight:700;margin-bottom:3px}
+    .hopt-desc{font-size:12px;color:var(--mut)}
+    .hcancel{margin-top:10px;width:100%;padding:13px;border-radius:12px;
+      border:none;background:transparent;color:var(--mut);font-size:15px;cursor:pointer}
+    .hcancel:active{background:rgba(255,255,255,.05)}
+  </style>
+</head>
+<body>
+<div id="g-err" onclick="this.style.display='none'"></div>
+<div id="app">
+
+  <!-- ══ HOME ══ -->
+  <div class="scr on" id="s-home">
+    <div class="hdr">
+      <span style="font-size:24px">👁️</span>
+      <h1>OpticMed <span id="ai-badge-home"
+          style="font-size:11px;color:var(--mut);vertical-align:middle;
+          background:var(--card);border:1px solid var(--bdr);
+          border-radius:6px;padding:2px 7px">IA cargando…</span></h1>
+      <button class="ico" onclick="go('s-settings')">⚙️</button>
+    </div>
+    <div class="scroll">
+      <button class="btn bp fw" style="margin-bottom:16px" onclick="startFlow()">＋ Nueva Medición</button>
+      <div class="sh"><h2>PACIENTES</h2>
+        <button class="btn bg sm" onclick="go('s-add-patient')">+ Nuevo</button></div>
+      <div class="srch"><span style="color:var(--mut)">🔍</span>
+        <input type="text" placeholder="Buscar paciente…" id="h-srch" oninput="renderPats()"></div>
+      <div id="pat-list"></div>
+    </div>
+  </div>
+
+  <!-- ══ ADD PATIENT ══ -->
+  <div class="scr" id="s-add-patient">
+    <div class="hdr"><button class="ico" onclick="go('s-home')">←</button><h1>Nuevo Paciente</h1></div>
+    <div class="scroll">
+      <div style="margin-bottom:14px"><label class="lbl">Nombre completo *</label>
+        <input class="inp" id="np-name" type="text" placeholder="Ej: Ana González" autocomplete="off"></div>
+      <div style="margin-bottom:14px"><label class="lbl">RUT / ID (opcional)</label>
+        <input class="inp" id="np-rut" type="text" placeholder="12.345.678-9"></div>
+      <div style="margin-bottom:14px"><label class="lbl">Teléfono (opcional)</label>
+        <input class="inp" id="np-tel" type="tel" placeholder="+56 9 8765 4321"></div>
+      <div style="margin-bottom:14px"><label class="lbl">Notas</label>
+        <textarea class="inp" id="np-notes" rows="3" placeholder="Información adicional…"></textarea></div>
+    </div>
+    <div class="abar">
+      <button class="btn bg f1" onclick="go('s-home')">Cancelar</button>
+      <button class="btn bp f1" onclick="savePat()">Guardar ✓</button>
+    </div>
+  </div>
+
+  <!-- ══ SELECT PATIENT ══ -->
+  <div class="scr" id="s-sel">
+    <div class="hdr"><button class="ico" onclick="go('s-home')">←</button><h1>¿Para quién?</h1></div>
+    <div class="scroll">
+      <button class="btn bg fw" style="margin-bottom:14px" onclick="beginCam(null)">Continuar sin paciente</button>
+      <div class="srch"><span style="color:var(--mut)">🔍</span>
+        <input type="text" placeholder="Buscar…" id="sp-srch" oninput="renderSelPats()"></div>
+      <div id="sel-list"></div>
+    </div>
+  </div>
+
+  <!-- ══ CAMERA ══ -->
+  <div class="scr" id="s-cam">
+    <div id="cam-wrap">
+      <canvas id="cam-canvas"></canvas>
+      <div class="scan-line" id="scanline" style="display:none"></div>
+      <div class="cam-top">
+        <button class="ico" style="color:#fff;background:rgba(0,0,0,.45)"
+                onclick="stopCam();go('s-home')">←</button>
+        <span class="cam-top-title" id="cam-title">Medición Frontal</span>
+        <span class="pill" id="cam-pill">🔄</span>
+      </div>
+      <div class="ai-badge ab-load" id="ai-badge" style="display:none"></div>
+      <div class="dp-overlay" id="dp-overlay" style="display:none">
+        <div class="dp-big">
+          <span class="dp-num" id="dp-total">—</span>
+          <span class="dp-unit"> mm DP</span>
+        </div>
+        <div class="dp-row">
+          <div class="dpc">OD <b id="dp-od">—</b> mm</div>
+          <div class="dpc">OI <b id="dp-oi">—</b> mm</div>
+        </div>
+      </div>
+      <!-- Distance indicator badge -->
+      <div id="dist-badge"></div>
+      <!-- Camera error overlay -->
+      <div id="cam-err-box">
+        <div id="cam-err-icon">📷</div>
+        <div id="cam-err-msg"></div>
+        <button id="cam-err-retry" onclick="retryCam()">Reintentar</button>
+        <button class="btn bg" style="width:auto;padding:10px 20px;font-size:13px"
+                onclick="stopCam();go('s-home')">← Volver</button>
+      </div>
+    </div>
+    <div class="mode-bar">
+      <button class="mode-btn" id="mb-ai"     onclick="setMeasureMode('ai')">🤖 AUTO-IA</button>
+      <button class="mode-btn on" id="mb-manual" onclick="setMeasureMode('manual')">✏️ MANUAL</button>
+      <button class="mode-btn"    id="mb-side"   onclick="setMeasureMode('side')">📐 LATERAL</button>
+    </div>
+    <div class="cam-ctrl">
+      <button class="cbtn" id="torch-btn" onclick="toggleTorch()">💡</button>
+      <button class="shutter" id="shutter" onclick="onShutter()" disabled>
+        <div class="si dim" id="si"></div>
+      </button>
+      <button class="cbtn" onclick="flipCam()">🔄</button>
+    </div>
+  </div>
+
+  <!-- ══ MARKING ══ -->
+  <div class="scr" id="s-mark">
+    <div class="mark-hdr">
+      <button class="ico" onclick="retake()">←</button>
+      <span class="mark-title" id="mark-title">Marcar Puntos</span>
+      <button class="ico" onclick="undoMark()">↩</button>
+    </div>
+    <div class="steps-bar" id="steps-bar"></div>
+    <div class="instr" id="instr"><h3 id="instr-t"></h3><p id="instr-d"></p></div>
+    <div id="mark-wrap"><canvas id="mark-canvas"></canvas></div>
+    <div class="live-bar" id="live-bar">
+      <span style="font-size:12px;color:var(--mut)">Marque los puntos para ver resultados</span>
+    </div>
+    <div class="abar">
+      <button class="btn bg f1" onclick="retake()">🔄 Repetir</button>
+      <button class="btn bp" style="flex:2" id="mark-next" onclick="markDone()" disabled>Continuar →</button>
+    </div>
+  </div>
+
+  <!-- ══ RESULTS ══ -->
+  <div class="scr" id="s-results">
+    <div class="hdr">
+      <button class="ico" onclick="go('s-home')">🏠</button>
+      <h1>Resultados</h1>
+      <button class="ico" onclick="shareRes()">📤</button>
+    </div>
+    <div class="scroll">
+      <div id="res-pat" style="margin-bottom:6px"></div>
+      <div id="res-date" style="font-size:12px;color:var(--mut);margin-bottom:14px"></div>
+      <div class="sh"><h2>DISTANCIA PUPILAR</h2></div>
+      <div class="rgrid" id="res-pd"></div>
+      <div class="sh" style="margin-top:4px"><h2>PARÁMETROS DEL LENTE</h2></div>
+      <div class="rgrid" id="res-lens"></div>
+      <div class="sh" id="res-heights-hdr" style="margin-top:4px;display:none">
+        <h2 id="res-height-type-lbl">ALTURA DE LENTE</h2>
+      </div>
+      <div class="rgrid" id="res-heights" style="display:none"></div>
+      <div class="ibox" id="iris-note" style="display:none">
+        🤖 <strong>Medición automática por IA</strong> — escala basada en diámetro de iris promedio (11.7 mm). Precisión ±1-2 mm.
+      </div>
+      <button class="btn bg fw" style="margin-top:8px" onclick="go('s-extra')">
+        + Agregar medidas adicionales
+      </button>
+    </div>
+    <div class="abar">
+      <button class="btn bg f1" onclick="startFlow()">Nueva</button>
+      <button class="btn bs" style="flex:2" id="save-btn" onclick="saveRes()">💾 Guardar</button>
+    </div>
+  </div>
+
+  <!-- ══ EXTRA ══ -->
+  <div class="scr" id="s-extra">
+    <div class="hdr"><button class="ico" onclick="go('s-results')">←</button><h1>Medidas Adicionales</h1></div>
+    <div class="tabs">
+      <button class="tab on" id="t-side" onclick="swTab('side')">📷 Lateral</button>
+      <button class="tab"    id="t-man"  onclick="swTab('man')">✏️ Manual</button>
+      <button class="tab"    id="t-alt"  onclick="swTab('alt')">📏 Alturas</button>
+    </div>
+    <div class="scroll" id="ex-side">
+      <div class="ibox"><strong>Foto lateral:</strong> paciente con sus lentes puestos. Cámara exactamente al costado del ojo. Paciente sostiene tarjeta verticalmente como escala.</div>
+      <button class="btn bp fw" onclick="startSideMode()">📷 Tomar Foto Lateral</button>
+    </div>
+    <div class="scroll" id="ex-man" style="display:none">
+      <div class="ibox"><strong>Valores típicos:</strong> Pantoscópico 8–12° · Panorámico 5–10° · Vértice 12–14 mm</div>
+      <div class="mr"><span class="ml">📐 Ángulo Pantoscópico</span>
+        <input class="mf" type="number" id="m-panto" placeholder="10" min="0" max="30" step="0.5"><span class="mu">°</span></div>
+      <div class="mr"><span class="ml">🔁 Ángulo Panorámico</span>
+        <input class="mf" type="number" id="m-pano" placeholder="5" min="0" max="20" step="0.5"><span class="mu">°</span></div>
+      <div class="mr"><span class="ml">📏 Distancia al Vértice</span>
+        <input class="mf" type="number" id="m-vert" placeholder="12" min="5" max="25" step="0.5"><span class="mu">mm</span></div>
+    </div>
+    <div class="scroll" id="ex-alt" style="display:none">
+      <div class="ibox" style="margin-bottom:14px">
+        <strong>Altura del lente:</strong> El paciente debe tener el lente puesto y mirar de frente a la cámara. Selecciona el tipo según la prescripción.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="hopt-btn" onclick="openHeightModal()">
+          <div class="hopt-title">📏 Medir Altura de Lente</div>
+          <div class="hopt-desc">Selecciona tipo: multifocal, bifocal flap top o bifocal invisible</div>
+        </button>
+      </div>
+    </div>
+    <div class="abar">
+      <button class="btn bs fw" onclick="saveExtra()">Guardar y Ver Resultados ✓</button>
+    </div>
+  </div>
+
+  <!-- ══ PATIENT DETAIL ══ -->
+  <div class="scr" id="s-detail">
+    <div class="hdr"><button class="ico" onclick="go('s-home')">←</button>
+      <h1 id="det-name">Paciente</h1>
+      <button class="ico" style="color:var(--err)" onclick="delPat()">🗑️</button></div>
+    <div class="scroll">
+      <div class="card det-info" id="det-info"></div>
+      <div class="sh" style="margin-top:10px"><h2>HISTORIAL</h2>
+        <button class="btn bp sm" onclick="measureForCurrent()">+ Medir</button></div>
+      <div id="det-hist"></div>
+    </div>
+  </div>
+
+  <!-- ══ SETTINGS ══ -->
+  <div class="scr" id="s-settings">
+    <div class="hdr"><button class="ico" onclick="go('s-home')">←</button><h1>Configuración</h1></div>
+    <div class="scroll">
+      <div style="margin-bottom:14px"><label class="lbl">Nombre de la Óptica</label>
+        <input class="inp" id="cfg-name" placeholder="Mi Óptica"></div>
+      <div style="margin-bottom:14px"><label class="lbl">Referencia escala (ancho de tarjeta de crédito)</label>
+        <select class="inp" id="cfg-ref">
+          <option value="85.6">Tarjeta de crédito — ancho 85.6 mm</option>
+          <option value="54">Tarjeta de crédito — alto 54 mm</option>
+          <option value="100">Regla de 100 mm</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px"><label class="lbl">Diámetro iris para calibración IA (mm)</label>
+        <input class="inp" id="cfg-iris" type="number" placeholder="11.7" step="0.1" min="10" max="14">
+        <p style="font-size:12px;color:var(--mut);margin-top:5px">Promedio clínico: 11.7 mm.</p>
+      </div>
+      <button class="btn bp fw" onclick="saveCfg()">Guardar configuración</button>
+      <div class="ibox" style="margin-top:16px">
+        <strong>OpticMed v4.0</strong><br>
+        Modo manual: foto + marcado de puntos (sin internet).<br>
+        Modo IA: detección automática de iris (requiere internet).<br>
+        <span id="cfg-cam-info" style="color:var(--warn)"></span>
+      </div>
+      <button class="btn bd fw" style="margin-top:14px" onclick="clearAll()">🗑️ Borrar todos los datos</button>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ══ HEIGHT TYPE MODAL ══ -->
+<div id="htype-modal" onclick="if(event.target===this)closeHeightModal()">
+  <div class="hmodal-box">
+    <h3>📏 Tipo de Lente</h3>
+    <p class="hm-sub">Paciente con lentes puestos, mirando de frente.<br>Sostenga la tarjeta de referencia bajo la nariz.</p>
+    <div class="hopt">
+      <button class="hopt-btn" onclick="startHeightMeasurement('multifocal')">
+        <div class="hopt-title">🔵 Multifocal</div>
+        <div class="hopt-desc">Altura medida desde el centro de la pupila hasta el borde inferior del lente</div>
+      </button>
+      <button class="hopt-btn" onclick="startHeightMeasurement('bifocal_flap')">
+        <div class="hopt-title">👁️ Bifocal Flap Top</div>
+        <div class="hopt-desc">Altura medida desde donde comienza el párpado inferior hasta el borde inferior del lente</div>
+      </button>
+      <button class="hopt-btn" onclick="startHeightMeasurement('bifocal_invis')">
+        <div class="hopt-title">🟢 Bifocal Invisible</div>
+        <div class="hopt-desc">Altura medida desde el centro de la pupila hasta el borde inferior del lente</div>
+      </button>
+    </div>
+    <button class="hcancel" onclick="closeHeightModal()">Cancelar</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   GLOBAL ERROR HANDLER
+══════════════════════════════════════════════════════ */
+window.onerror = function(msg, src, line, col, err) {
+  var el = document.getElementById('g-err');
+  if (el) {
+    el.style.display = 'block';
+    el.textContent = '⚠️ Error JS (toca para cerrar): ' + msg + ' — línea ' + line;
+  }
+  return false;
+};
+
+/* ══════════════════════════════════════════════════════
+   CONFIG + STATE
+══════════════════════════════════════════════════════ */
+var CFG = { irisMM: 11.7, refMM: 85.6 };
+var S = {
+  patient: null,
+  camMode: 'front',
+  measureMode: 'manual',   // start manual — no import() needed
+  facingMode: 'environment',
+  stream: null,
+  torchOn: false,
+  aiReady: false,
+  aiLoading: false,
+  aiError: false,
+  faceOk: false,
+  raf: null,
+  smoothedLM: null,
+  sendingFM: false,
+  lastFMSend: 0,
+  livePD: null, livePD_OD: null, livePD_OI: null,
+  photo: null,
+  markMode: 'front',
+  heightMode: null,   // 'multifocal' | 'bifocal_flap' | 'bifocal_invis' | null
+  distOk: false,      // true when user is at correct measurement distance
+  markers: [], markStep: 0,
+  scaleMMpx: null,
+  result: null,
+  saved: false
+};
+var faceMeshInst = null;
+
+function makeResult() {
+  return { id:null, patientId:null, date:new Date().toISOString(),
+           pdTotal:null, pdOD:null, pdOI:null, pantoAngle:null,
+           panoAngle:null, vertDist:null, usedAI:false,
+           altOD:null, altOI:null, altType:null };
+}
+
+/* ══════════════════════════════════════════════════════
+   LOCAL DB
+══════════════════════════════════════════════════════ */
+var DB = {
+  pats: function(){ try{ return JSON.parse(localStorage.getItem('om_p')||'[]'); }catch(e){ return []; } },
+  mes:  function(){ try{ return JSON.parse(localStorage.getItem('om_m')||'[]'); }catch(e){ return []; } },
+  cfg:  function(){ try{ return JSON.parse(localStorage.getItem('om_c')||'{}'); }catch(e){ return {}; } },
+  sP:   function(d){ try{ localStorage.setItem('om_p',JSON.stringify(d)); }catch(e){} },
+  sM:   function(d){ try{ localStorage.setItem('om_m',JSON.stringify(d)); }catch(e){} },
+  sC:   function(d){ try{ localStorage.setItem('om_c',JSON.stringify(d)); }catch(e){} }
+};
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+
+/* ══════════════════════════════════════════════════════
+   DISTANCE VIBRATION
+══════════════════════════════════════════════════════ */
+var _vibInt = null;
+function startDistVib() {
+  if (_vibInt) return;
+  if (!navigator.vibrate) return;
+  navigator.vibrate([250, 150]);
+  _vibInt = setInterval(function() {
+    if (!navigator.vibrate) return;
+    navigator.vibrate([250, 150]);
+  }, 500);
+}
+function stopDistVib() {
+  if (_vibInt) { clearInterval(_vibInt); _vibInt = null; }
+  if (navigator.vibrate) navigator.vibrate(0);
+}
+function updateDistBadge(irisPixDiam, renderedH) {
+  var db = document.getElementById('dist-badge');
+  if (!db) return;
+  if (!S.faceOk || !renderedH) {
+    db.style.display = 'none';
+    stopDistVib();
+    S.distOk = false;
+    return;
+  }
+  // ratio = iris diameter / rendered video height — robust across cameras
+  var ratio = irisPixDiam / renderedH;
+  var inRange = ratio >= 0.022 && ratio <= 0.075;
+  if (inRange) {
+    db.style.display = 'block';
+    db.className = 'dist-badge dist-ok';
+    db.textContent = '✅ Distancia correcta — ¡tome la foto!';
+    if (!S.distOk) {
+      S.distOk = true;
+      stopDistVib();
+      if (navigator.vibrate) navigator.vibrate([40, 30, 80]); // confirmación
+    }
+  } else {
+    db.style.display = 'block';
+    S.distOk = false;
+    if (ratio < 0.022) {
+      db.className = 'dist-badge dist-far';
+      db.textContent = '↔️ Acércate al paciente';
+    } else {
+      db.className = 'dist-badge dist-near';
+      db.textContent = '↕️ Aléjate un poco';
+    }
+    startDistVib();
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   AI LOADING — script tag injection (NO import() )
+══════════════════════════════════════════════════════ */
+function initAI() {
+  if (S.aiLoading || S.aiReady || S.aiError) return;
+  S.aiLoading = true;
+  setAIBadge('load', '⏳ Cargando IA…');
+  setBadgeHome('⏳ IA…');
+
+  // Inject face_mesh.js via standard <script> tag — no dynamic import()
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js';
+  s.crossOrigin = 'anonymous';
+
+  s.onload = function() {
+    try {
+      faceMeshInst = new FaceMesh({
+        locateFile: function(f) {
+          return 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/' + f;
+        }
+      });
+      faceMeshInst.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+      faceMeshInst.onResults(onFMResults);
+      // initialize() warms up the WASM model
+      faceMeshInst.initialize().then(function() {
+        S.aiReady = true;
+        S.aiLoading = false;
+        setAIBadge('ok', '🤖 IA lista');
+        setBadgeHome('✅ IA lista');
+        toast('Motor IA listo — modo AUTO-IA disponible', 'ok');
+        // Switch to AI mode if user hasn't changed it
+        if (S.measureMode === 'manual' && document.getElementById('s-cam').classList.contains('on')) {
+          S.measureMode = 'ai';
+          updateModeBtns();
+        }
+      }).catch(function(e) {
+        aiFailed('No se pudo inicializar el modelo: ' + (e.message||e));
+      });
+    } catch(e) {
+      aiFailed('Error al crear FaceMesh: ' + (e.message||e));
+    }
+  };
+
+  s.onerror = function() {
+    aiFailed('Sin internet o CDN no disponible');
+  };
+
+  document.head.appendChild(s);
+}
+
+function aiFailed(reason) {
+  S.aiLoading = false;
+  S.aiError = true;
+  faceMeshInst = null;
+  setAIBadge('err', '⚠️ IA no disponible');
+  setBadgeHome('Manual');
+  if (S.measureMode === 'ai') { S.measureMode = 'manual'; updateModeBtns(); }
+  console.warn('IA fallo:', reason);
+}
+
+function onFMResults(results) {
+  S.sendingFM = false;
+  if (!S.aiReady) return;
+  if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+    S.smoothedLM = smoothLM(results.multiFaceLandmarks[0], S.smoothedLM);
+    S.faceOk = true;
+  } else {
+    S.smoothedLM = null;
+    S.faceOk = false;
+    S.livePD = null; S.livePD_OD = null; S.livePD_OI = null;
+  }
+}
+
+function setAIBadge(type, txt) {
+  var el = document.getElementById('ai-badge');
+  if (!el) return;
+  el.style.display = 'block';
+  el.className = 'ai-badge ab-' + type;
+  el.textContent = txt;
+}
+function setBadgeHome(txt) {
+  var el = document.getElementById('ai-badge-home');
+  if (el) el.textContent = txt;
+}
+
+/* ══════════════════════════════════════════════════════
+   NAVIGATION
+══════════════════════════════════════════════════════ */
+function go(id) {
+  document.querySelectorAll('.scr').forEach(function(s){ s.classList.remove('on'); });
+  var el = document.getElementById(id);
+  if (el) el.classList.add('on');
+  if (id === 's-home')     renderPats();
+  if (id === 's-sel')      renderSelPats();
+  if (id === 's-results')  renderRes();
+  if (id === 's-settings') loadCfg();
+}
+
+/* ══════════════════════════════════════════════════════
+   PATIENTS
+══════════════════════════════════════════════════════ */
+function renderPats() {
+  var q = (document.getElementById('h-srch').value||'').toLowerCase();
+  var pts = DB.pats().filter(function(p){ return p.name.toLowerCase().indexOf(q)>=0; });
+  var mes = DB.mes();
+  var el = document.getElementById('pat-list');
+  if (!pts.length) {
+    el.innerHTML = '<div class="empty"><div class="ei">👥</div><p>'+(
+      DB.pats().length ? 'Sin coincidencias.' :
+      'Aún no hay pacientes.<br>Presiona <strong>+ Nuevo</strong> para agregar el primero.'
+    )+'</p></div>';
+    return;
+  }
+  el.innerHTML = pts.map(function(p) {
+    var last = mes.filter(function(m){ return m.patientId===p.id; })
+                  .sort(function(a,b){ return new Date(b.date)-new Date(a.date); })[0];
+    return '<div class="prow" onclick="openDetail(\''+p.id+'\')">'+
+      '<div class="av">'+esc(p.name[0]).toUpperCase()+'</div>'+
+      '<div><div class="pn">'+esc(p.name)+'</div>'+
+      '<div class="pm">'+(last?'Última: '+fmtDate(last.date):'Sin mediciones')+'</div></div>'+
+      '<div class="ch">›</div></div>';
+  }).join('');
+}
+function renderSelPats() {
+  var q = (document.getElementById('sp-srch').value||'').toLowerCase();
+  var pts = DB.pats().filter(function(p){ return p.name.toLowerCase().indexOf(q)>=0; });
+  var el = document.getElementById('sel-list');
+  if (!pts.length) { el.innerHTML='<div class="empty"><div class="ei">👥</div><p>No hay pacientes.</p></div>'; return; }
+  el.innerHTML = pts.map(function(p) {
+    return '<div class="prow" onclick="beginCam(\''+p.id+'\')">'+
+      '<div class="av">'+esc(p.name[0]).toUpperCase()+'</div>'+
+      '<div><div class="pn">'+esc(p.name)+'</div></div><div class="ch">›</div></div>';
+  }).join('');
+}
+function savePat() {
+  var name = document.getElementById('np-name').value.trim();
+  if (!name) { toast('El nombre es obligatorio','err'); return; }
+  var p = { id:uid(), name:name,
+    rut:document.getElementById('np-rut').value.trim(),
+    tel:document.getElementById('np-tel').value.trim(),
+    notes:document.getElementById('np-notes').value.trim(),
+    created:new Date().toISOString() };
+  var pts = DB.pats(); pts.unshift(p); DB.sP(pts);
+  ['np-name','np-rut','np-tel','np-notes'].forEach(function(id){
+    var e=document.getElementById(id); if(e) e.value='';
+  });
+  toast('Paciente guardado ✓','ok'); go('s-home');
+}
+function openDetail(pid) {
+  var p = DB.pats().find(function(x){ return x.id===pid; });
+  if (!p) return;
+  S.patient = p;
+  document.getElementById('det-name').textContent = p.name;
+  document.getElementById('det-info').innerHTML =
+    (p.rut?'<div>🪪 '+esc(p.rut)+'</div>':'')+
+    (p.tel?'<div>📱 '+esc(p.tel)+'</div>':'')+
+    (p.notes?'<div>📝 '+esc(p.notes)+'</div>':'')+
+    '<div>📅 Registrado: '+fmtDate(p.created)+'</div>';
+  var mes = DB.mes().filter(function(m){ return m.patientId===pid; })
+                    .sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+  var hel = document.getElementById('det-hist');
+  hel.innerHTML = mes.length ? mes.map(function(m) {
+    return '<div class="hi" onclick="viewMes(\''+m.id+'\')">'+
+      '<div class="hd">📅 '+fmtDate(m.date)+'</div>'+
+      '<div class="hvs">'+
+      (m.pdTotal?'<div class="hv"><div class="hvl">DP Total</div><div class="hvn">'+m.pdTotal+'mm</div></div>':'')+
+      (m.pdOD?'<div class="hv"><div class="hvl">OD</div><div class="hvn">'+m.pdOD+'mm</div></div>':'')+
+      (m.pdOI?'<div class="hv"><div class="hvl">OI</div><div class="hvn">'+m.pdOI+'mm</div></div>':'')+
+      (m.pantoAngle?'<div class="hv"><div class="hvl">Panto</div><div class="hvn">'+m.pantoAngle+'°</div></div>':'')+
+      (m.vertDist?'<div class="hv"><div class="hvl">Vértice</div><div class="hvn">'+m.vertDist+'mm</div></div>':'')+
+      '</div></div>';
+  }).join('') : '<div class="empty"><div class="ei">📊</div><p>Sin mediciones aún.</p></div>';
+  go('s-detail');
+}
+function delPat() {
+  if (!S.patient) return;
+  if (!confirm('¿Eliminar a '+S.patient.name+' y todas sus mediciones?')) return;
+  DB.sP(DB.pats().filter(function(p){ return p.id!==S.patient.id; }));
+  DB.sM(DB.mes().filter(function(m){ return m.patientId!==S.patient.id; }));
+  S.patient = null; toast('Paciente eliminado','ok'); go('s-home');
+}
+function measureForCurrent() { beginCam(S.patient ? S.patient.id : null); }
+function viewMes(mid) {
+  var m = DB.mes().find(function(x){ return x.id===mid; });
+  if (!m) return;
+  S.result = Object.assign({},m); S.saved = true;
+  S.patient = DB.pats().find(function(p){ return p.id===m.patientId; }) || null;
+  go('s-results');
+}
+
+/* ══════════════════════════════════════════════════════
+   MEASUREMENT FLOW
+══════════════════════════════════════════════════════ */
+function startFlow() {
+  var pts = DB.pats();
+  if (pts.length) go('s-sel'); else beginCam(null);
+}
+function beginCam(patientId) {
+  S.patient = patientId ? (DB.pats().find(function(p){ return p.id===patientId; })||null) : null;
+  S.result = makeResult();
+  S.result.patientId = patientId;
+  S.saved = false;
+  S.camMode = 'front';
+  S.facingMode = 'environment';
+  S.torchOn = false;
+  S.heightMode = null; // reset height mode for normal PD flow
+  S.measureMode = S.aiReady ? 'ai' : 'manual';
+  go('s-cam');
+  updateModeBtns();
+  startCam();
+}
+function startSideMode() {
+  S.camMode = 'side';
+  S.measureMode = 'side';
+  go('s-cam');
+  updateModeBtns();
+  startCam();
+}
+
+/* ══════════════════════════════════════════════════════
+   MODE SWITCHING
+══════════════════════════════════════════════════════ */
+function setMeasureMode(m) {
+  if (m === 'ai') {
+    if (S.aiError) {
+      toast('IA no disponible. Active internet y recargue la página.','err'); return;
+    }
+    if (!S.aiReady) {
+      if (!S.aiLoading) initAI();
+      toast('IA aún cargando, espere un momento…'); return;
+    }
+  }
+  S.measureMode = m;
+  if (m === 'side') { S.camMode='side'; startCam(); }
+  else if (S.camMode !== 'front') { S.camMode='front'; startCam(); }
+  updateModeBtns();
+}
+function updateModeBtns() {
+  ['ai','manual','side'].forEach(function(m) {
+    var el = document.getElementById('mb-'+m);
+    if (el) el.className = 'mode-btn' + (S.measureMode===m?' on':'');
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   CAMERA
+══════════════════════════════════════════════════════ */
+var camCanvas = document.getElementById('cam-canvas');
+var camCtx    = camCanvas.getContext('2d');
+var vidEl     = document.createElement('video');
+// iOS Safari requires setAttribute + explicit play() for camera streams
+vidEl.autoplay = true;
+vidEl.muted    = true;
+vidEl.playsInline = true;
+vidEl.setAttribute('autoplay', '');
+vidEl.setAttribute('muted', '');
+vidEl.setAttribute('playsinline', '');
+vidEl.setAttribute('webkit-playsinline', '');
+
+// Detect iOS
+var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function showCamError(msg) {
+  document.getElementById('cam-err-msg').textContent = msg;
+  document.getElementById('cam-err-box').style.display = 'flex';
+  document.getElementById('shutter').disabled = true;
+  document.getElementById('si').classList.add('dim');
+  document.getElementById('scanline').style.display = 'none';
+}
+function hideCamError() {
+  document.getElementById('cam-err-box').style.display = 'none';
+}
+function retryCam() {
+  hideCamError();
+  startCam();
+}
+
+async function startCam() {
+  stopCam();
+  hideCamError();
+
+  var isFront = S.camMode === 'front';
+  document.getElementById('cam-title').textContent = isFront ? 'Medición Frontal' : 'Medición Lateral';
+  document.getElementById('si').classList.add('dim');
+  document.getElementById('shutter').disabled = true;
+
+  // Check if camera API is available
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    var proto = location.protocol;
+    if (proto === 'file:') {
+      showCamError(
+        'La cámara no funciona al abrir el archivo directamente desde el almacenamiento.\n\n' +
+        (isIOS
+          ? '✅ SOLUCIÓN: Abre Safari → ve a la URL que te dieron → permite la cámara.'
+          : '✅ SOLUCIÓN: Abre la URL web (https://...) en Chrome.')
+      );
+    } else {
+      showCamError(
+        'La cámara no está disponible.\n\n' +
+        (isIOS
+          ? 'En iPhone: usa Safari (no Chrome). Permite la cámara en Ajustes → Safari → Cámara.'
+          : 'Usa Chrome actualizado.')
+      );
+    }
+    return;
+  }
+
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: S.facingMode, width: {ideal: 1920}, height: {ideal: 1080} },
+      audio: false
+    });
+    vidEl.srcObject = S.stream;
+    // iOS requires explicit play() call after setting srcObject
+    try { vidEl.play(); } catch(e) {}
+    await new Promise(function(resolve, reject) {
+      // Use onloadedmetadata (fires sooner on iOS than onloadeddata)
+      vidEl.onloadedmetadata = function() { setTimeout(resolve, 100); };
+      vidEl.onloadeddata = resolve;
+      vidEl.onerror = function(e) { reject(new Error('Error al cargar video')); };
+      // Generous timeout for iOS
+      setTimeout(resolve, 8000);
+    });
+    resizeCamCanvas();
+    document.getElementById('scanline').style.display = 'block';
+    document.getElementById('ai-badge').style.display = S.aiReady ? 'block' : 'none';
+    camLoop();
+  } catch(e) {
+    var msg = '';
+    var nm = e.name || '';
+    if (nm === 'NotAllowedError' || nm === 'PermissionDeniedError') {
+      msg = '🚫 Permiso de cámara denegado.\n\n' +
+            'Para permitir:\n' +
+            '1. Toca el icono 🔒 o 📷 en la barra de URL de Chrome\n' +
+            '2. Selecciona «Cámara» → «Permitir»\n' +
+            '3. Recarga la página\n\n' +
+            'Si abriste desde archivo local (file://), necesitas abrirlo desde internet.';
+    } else if (nm === 'NotFoundError' || nm === 'DevicesNotFoundError') {
+      msg = '📷 No se encontró cámara en este dispositivo.';
+    } else if (nm === 'NotReadableError' || nm === 'TrackStartError') {
+      msg = '📷 La cámara está en uso por otra aplicación. Cierra otras apps con cámara e intenta de nuevo.';
+    } else if (nm === 'OverconstrainedError') {
+      msg = '📷 La cámara no soporta la configuración requerida. Intenta rotar el teléfono.';
+    } else {
+      msg = '📷 Error al acceder a la cámara:\n' + (e.message || nm || e);
+      if (location.protocol === 'file:') {
+        msg += '\n\n⚠️ Archivo abierto localmente (file://). La cámara requiere HTTPS.';
+      }
+    }
+    showCamError(msg);
+  }
+}
+
+function stopCam() {
+  if (S.raf) { cancelAnimationFrame(S.raf); S.raf = null; }
+  if (S.stream) { S.stream.getTracks().forEach(function(t){ t.stop(); }); S.stream = null; }
+  vidEl.srcObject = null;
+  document.getElementById('scanline').style.display = 'none';
+  document.getElementById('dp-overlay').style.display = 'none';
+  document.getElementById('ai-badge').style.display = 'none';
+  var db = document.getElementById('dist-badge');
+  if (db) db.style.display = 'none';
+  stopDistVib();
+  S.smoothedLM = null;
+  S.faceOk = false;
+  S.sendingFM = false;
+  S.distOk = false;
+}
+
+function resizeCamCanvas() {
+  var wrap = document.getElementById('cam-wrap');
+  camCanvas.width  = wrap.clientWidth  || window.innerWidth;
+  camCanvas.height = wrap.clientHeight || (window.innerHeight - 180);
+}
+window.addEventListener('resize', function() {
+  if (document.getElementById('s-cam').classList.contains('on')) resizeCamCanvas();
+});
+
+var lastDetTs = 0;
+function camLoop(ts) {
+  S.raf = requestAnimationFrame(camLoop);
+  if (!vidEl.readyState || vidEl.readyState < 2) return;
+
+  var vw = vidEl.videoWidth, vh = vidEl.videoHeight;
+  var cw = camCanvas.width,  ch = camCanvas.height;
+  if (!vw || !vh || !cw || !ch) return;
+
+  // Cover-crop render
+  var sc = Math.max(cw/vw, ch/vh);
+  var dw = vw*sc, dh = vh*sc;
+  var ox = (cw-dw)/2, oy = (ch-dh)/2;
+  camCtx.drawImage(vidEl, ox, oy, dw, dh);
+
+  if (S.measureMode === 'ai' && S.aiReady) {
+    // Draw overlay from last smoothed landmarks
+    if (S.smoothedLM && S.faceOk) {
+      drawFaceOverlay(S.smoothedLM, ox, oy, dw, dh);
+      computeAIPD(S.smoothedLM, ox, oy, dw, dh);
+      setAIBadge('ok', '✅ Rostro detectado');
+      document.getElementById('dp-overlay').style.display = 'block';
+      document.getElementById('si').classList.remove('dim');
+      document.getElementById('shutter').disabled = false;
+    } else {
+      setAIBadge('seek', '🔍 Buscando rostro…');
+      document.getElementById('dp-overlay').style.display = 'none';
+      document.getElementById('si').classList.add('dim');
+      document.getElementById('shutter').disabled = true;
+    }
+    // Send frame to FaceMesh (throttled, sequential)
+    var now = ts || performance.now();
+    if (!S.sendingFM && faceMeshInst && now - lastDetTs > 120) {
+      lastDetTs = now;
+      S.sendingFM = true;
+      faceMeshInst.send({image: vidEl}).catch(function() { S.sendingFM = false; });
+    }
+  } else {
+    // Manual mode — shutter always enabled once camera starts
+    document.getElementById('dp-overlay').style.display = 'none';
+    if (!S.aiReady && !S.aiLoading) {
+      setAIBadge('seek', '✏️ Modo manual activo');
+      document.getElementById('ai-badge').style.display = 'block';
+    }
+    document.getElementById('si').classList.remove('dim');
+    document.getElementById('shutter').disabled = false;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   FACE DETECTION OVERLAY
+══════════════════════════════════════════════════════ */
+var IRIS_R_CTR=468, IRIS_R_R=469, IRIS_R_L=471;
+var IRIS_L_CTR=473, IRIS_L_R=474, IRIS_L_L=476;
+var NOSE_BR=168;
+var EYE_CONN = [
+  [33,7],[7,163],[163,144],[144,145],[145,153],[153,154],[154,155],[155,133],
+  [33,246],[246,161],[161,160],[160,159],[159,158],[158,157],[157,173],[173,133],
+  [362,382],[382,381],[381,380],[380,374],[374,373],[373,390],[390,249],[249,263],
+  [362,398],[398,384],[384,385],[385,386],[386,387],[387,388],[388,466],[466,263]
+];
+
+function smoothLM(n, o) {
+  var a = 0.4;
+  if (!o || o.length !== n.length) return n;
+  return n.map(function(p, i) {
+    return { x: o[i].x*(1-a)+p.x*a, y: o[i].y*(1-a)+p.y*a, z: p.z };
+  });
+}
+
+function px(lm, idx, ox, oy, dw, dh) {
+  return { x: ox + lm[idx].x*dw, y: oy + lm[idx].y*dh };
+}
+
+function drawFaceOverlay(lm, ox, oy, dw, dh) {
+  camCtx.fillStyle = 'rgba(0,198,224,0.18)';
+  for (var i = 0; i < Math.min(468, lm.length); i++) {
+    var p = px(lm, i, ox, oy, dw, dh);
+    camCtx.beginPath(); camCtx.arc(p.x, p.y, 1.2, 0, Math.PI*2); camCtx.fill();
+  }
+  if (lm.length > 467) {
+    camCtx.strokeStyle = 'rgba(0,198,224,0.4)'; camCtx.lineWidth = 1;
+    EYE_CONN.forEach(function(c) {
+      var a = px(lm, c[0], ox, oy, dw, dh), b = px(lm, c[1], ox, oy, dw, dh);
+      camCtx.beginPath(); camCtx.moveTo(a.x, a.y); camCtx.lineTo(b.x, b.y); camCtx.stroke();
+    });
+    if (lm.length > 476) {
+      var cR = px(lm,IRIS_R_CTR,ox,oy,dw,dh), rR = px(lm,IRIS_R_R,ox,oy,dw,dh);
+      var cL = px(lm,IRIS_L_CTR,ox,oy,dw,dh), rL = px(lm,IRIS_L_R,ox,oy,dw,dh);
+      camCtx.strokeStyle = '#06d6a0'; camCtx.lineWidth = 2.5;
+      camCtx.beginPath(); camCtx.arc(cR.x,cR.y,d2(cR,rR),0,Math.PI*2); camCtx.stroke();
+      camCtx.beginPath(); camCtx.arc(cL.x,cL.y,d2(cL,rL),0,Math.PI*2); camCtx.stroke();
+      cross(cR.x, cR.y, 10, '#06d6a0');
+      cross(cL.x, cL.y, 10, '#06d6a0');
+      camCtx.beginPath(); camCtx.moveTo(cR.x,cR.y); camCtx.lineTo(cL.x,cL.y);
+      camCtx.strokeStyle = 'rgba(0,198,224,.8)'; camCtx.lineWidth = 2;
+      camCtx.setLineDash([6,4]); camCtx.stroke(); camCtx.setLineDash([]);
+      if (lm.length > 168) {
+        var nb = px(lm, NOSE_BR, ox, oy, dw, dh);
+        camCtx.beginPath(); camCtx.arc(nb.x,nb.y,4,0,Math.PI*2);
+        camCtx.fillStyle = 'rgba(255,209,102,.85)'; camCtx.fill();
+      }
+    }
+  }
+}
+
+function cross(x, y, r, c) {
+  camCtx.strokeStyle = c; camCtx.lineWidth = 2;
+  camCtx.beginPath(); camCtx.moveTo(x-r,y); camCtx.lineTo(x+r,y); camCtx.stroke();
+  camCtx.beginPath(); camCtx.moveTo(x,y-r); camCtx.lineTo(x,y+r); camCtx.stroke();
+}
+function d2(a, b) { return Math.sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)); }
+
+function computeAIPD(lm, ox, oy, dw, dh) {
+  if (lm.length <= 476) return;
+  var cR=px(lm,IRIS_R_CTR,ox,oy,dw,dh), rR=px(lm,IRIS_R_R,ox,oy,dw,dh), lR=px(lm,IRIS_R_L,ox,oy,dw,dh);
+  var cL=px(lm,IRIS_L_CTR,ox,oy,dw,dh), rL=px(lm,IRIS_L_R,ox,oy,dw,dh), lL=px(lm,IRIS_L_L,ox,oy,dw,dh);
+  var diam = (d2(rR,lR)+d2(rL,lL))/2;
+  if (diam < 4) return;
+  var sc = CFG.irisMM / diam;
+  S.livePD    = +(d2(cR,cL)*sc).toFixed(1);
+  S.livePD_OD = +(d2(px(lm,NOSE_BR,ox,oy,dw,dh),cR)*sc).toFixed(1);
+  S.livePD_OI = +(d2(px(lm,NOSE_BR,ox,oy,dw,dh),cL)*sc).toFixed(1);
+  document.getElementById('dp-total').textContent = S.livePD;
+  document.getElementById('dp-od').textContent    = S.livePD_OD;
+  document.getElementById('dp-oi').textContent    = S.livePD_OI;
+  // Distance feedback — use ratio of iris diameter to rendered video height
+  updateDistBadge(diam, dh);
+}
+
+/* ══════════════════════════════════════════════════════
+   SHUTTER & CONTROLS
+══════════════════════════════════════════════════════ */
+function onShutter() {
+  if (S.measureMode === 'ai') captureAI();
+  else captureForManual();
+}
+function captureAI() {
+  if (!S.faceOk || !S.smoothedLM) { toast('No se detectó ningún rostro','err'); return; }
+  if (navigator.vibrate) navigator.vibrate([30,20,30]);
+  var snap = document.createElement('canvas');
+  snap.width = camCanvas.width; snap.height = camCanvas.height;
+  snap.getContext('2d').drawImage(camCanvas, 0, 0);
+  S.photo = snap.toDataURL('image/jpeg', 0.92);
+  S.result.pdTotal = S.livePD;
+  S.result.pdOD    = S.livePD_OD;
+  S.result.pdOI    = S.livePD_OI;
+  S.result.usedAI  = true;
+  S.result.date    = new Date().toISOString();
+  stopCam();
+  go('s-results');
+}
+function captureForManual() {
+  if (navigator.vibrate) navigator.vibrate(30);
+  var snap = document.createElement('canvas');
+  snap.width = camCanvas.width; snap.height = camCanvas.height;
+  snap.getContext('2d').drawImage(camCanvas, 0, 0);
+  S.photo    = snap.toDataURL('image/jpeg', 0.92);
+  // If in height measurement flow, override markMode
+  S.markMode = S.heightMode ? 'height' : S.camMode;
+  stopCam();
+  initMarking();
+}
+function toggleTorch() {
+  if (isIOS) { toast('La linterna no está disponible en iPhone (limitación de iOS)','err'); return; }
+  if (!S.stream) return;
+  var track = S.stream.getVideoTracks()[0];
+  if (!track) return;
+  S.torchOn = !S.torchOn;
+  track.applyConstraints({ advanced: [{ torch: S.torchOn }] })
+    .then(function() { document.getElementById('torch-btn').classList.toggle('lit', S.torchOn); })
+    .catch(function() { S.torchOn = false; toast('Linterna no disponible en este dispositivo','err'); });
+}
+async function flipCam() {
+  S.facingMode = S.facingMode === 'environment' ? 'user' : 'environment';
+  await startCam();
+}
+
+/* ══════════════════════════════════════════════════════
+   MANUAL MARKING
+══════════════════════════════════════════════════════ */
+var FRONT_STEPS = [
+  {id:'r1', lbl:'Ref 1',    title:'📍 Referencia — Borde Izquierdo',
+   desc:'Toque el borde izquierdo de la tarjeta de crédito que sostiene el paciente bajo la nariz.', color:'#ffd166'},
+  {id:'r2', lbl:'Ref 2',    title:'📍 Referencia — Borde Derecho',
+   desc:'Toque el borde derecho de la tarjeta para establecer la escala de medición.', color:'#ffd166'},
+  {id:'nb', lbl:'Puente',   title:'🟢 Centro del Puente Nasal',
+   desc:'Toque el punto central del puente de la nariz (entre los ojos).', color:'#06d6a0'},
+  {id:'od', lbl:'Pupila OD',title:'🔵 Pupila — Ojo Derecho del paciente',
+   desc:'Toque el centro exacto de la pupila del ojo DERECHO del paciente.', color:'#00c6e0'},
+  {id:'oi', lbl:'Pupila OI',title:'🔵 Pupila — Ojo Izquierdo del paciente',
+   desc:'Toque el centro exacto de la pupila del ojo IZQUIERDO del paciente.', color:'#0077b6'}
+];
+var SIDE_STEPS = [
+  {id:'sr1',lbl:'Ref ↑',   title:'📍 Referencia — Punto Superior',
+   desc:'Toque el borde SUPERIOR de la tarjeta sostenida verticalmente junto al ojo.', color:'#ffd166'},
+  {id:'sr2',lbl:'Ref ↓',   title:'📍 Referencia — Punto Inferior',
+   desc:'Toque el borde INFERIOR de la tarjeta para establecer escala lateral.', color:'#ffd166'},
+  {id:'lt', lbl:'Lente ↑', title:'🟢 Borde Superior del Lente',
+   desc:'Toque el punto más alto del aro del lente.', color:'#06d6a0'},
+  {id:'lb', lbl:'Lente ↓', title:'🟢 Borde Inferior del Lente',
+   desc:'Toque el punto más bajo del aro del lente.', color:'#06d6a0'},
+  {id:'co', lbl:'Córnea',  title:'🔴 Frente de la Córnea',
+   desc:'Toque el punto más frontal visible del ojo (córnea) visto desde el lateral.', color:'#ef476f'},
+  {id:'lb2',lbl:'Rev.Lente',title:'🔴 Reverso del Lente',
+   desc:'Toque la superficie posterior del lente (la cara que mira hacia el ojo).', color:'#ef476f'}
+];
+
+// Height steps — reference from PUPIL (multifocal / bifocal invisible)
+var HEIGHT_STEPS_PUPIL = [
+  {id:'r1',  lbl:'Ref 1',     title:'📍 Referencia — Borde Izquierdo',
+   desc:'Toque el borde izquierdo de la tarjeta de crédito que sostiene el paciente bajo la nariz.',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',     title:'📍 Referencia — Borde Derecho',
+   desc:'Toque el borde derecho de la tarjeta para establecer la escala de medición.',color:'#ffd166'},
+  {id:'pod', lbl:'Pupila OD', title:'🔵 Centro Pupila — Ojo Derecho',
+   desc:'Toque el centro exacto de la pupila del ojo DERECHO del paciente (con el lente puesto).',color:'#00c6e0'},
+  {id:'poi', lbl:'Pupila OI', title:'🔵 Centro Pupila — Ojo Izquierdo',
+   desc:'Toque el centro exacto de la pupila del ojo IZQUIERDO del paciente.',color:'#0077b6'},
+  {id:'bod', lbl:'Marco↓ OD', title:'⬇️ Borde Inferior Marco — OD',
+   desc:'Toque el punto más bajo del aro del lente DERECHO (borde interior inferior).',color:'#06d6a0'},
+  {id:'boi', lbl:'Marco↓ OI', title:'⬇️ Borde Inferior Marco — OI',
+   desc:'Toque el punto más bajo del aro del lente IZQUIERDO (borde interior inferior).',color:'#06d6a0'}
+];
+// Height steps — reference from LOWER EYELID (bifocal flap top)
+var HEIGHT_STEPS_EYELID = [
+  {id:'r1',  lbl:'Ref 1',     title:'📍 Referencia — Borde Izquierdo',
+   desc:'Toque el borde izquierdo de la tarjeta de crédito que sostiene el paciente bajo la nariz.',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',     title:'📍 Referencia — Borde Derecho',
+   desc:'Toque el borde derecho de la tarjeta para establecer la escala de medición.',color:'#ffd166'},
+  {id:'pod', lbl:'Párpado OD',title:'👁️ Párpado Inferior — Ojo Derecho',
+   desc:'Toque el punto donde COMIENZA el párpado inferior del ojo DERECHO (no la pupila).',color:'#ef476f'},
+  {id:'poi', lbl:'Párpado OI',title:'👁️ Párpado Inferior — Ojo Izquierdo',
+   desc:'Toque el punto donde COMIENZA el párpado inferior del ojo IZQUIERDO.',color:'#ef476f'},
+  {id:'bod', lbl:'Marco↓ OD', title:'⬇️ Borde Inferior Marco — OD',
+   desc:'Toque el punto más bajo del aro del lente DERECHO (borde interior inferior).',color:'#06d6a0'},
+  {id:'boi', lbl:'Marco↓ OI', title:'⬇️ Borde Inferior Marco — OI',
+   desc:'Toque el punto más bajo del aro del lente IZQUIERDO (borde interior inferior).',color:'#06d6a0'}
+];
+
+var HEIGHT_TYPE_LABEL = {
+  multifocal: 'Multifocal',
+  bifocal_flap: 'Bifocal Flap Top',
+  bifocal_invis: 'Bifocal Invisible'
+};
+
+var mkCanvas = document.getElementById('mark-canvas');
+var mkCtx    = mkCanvas.getContext('2d');
+var mkImg    = null;
+var mkIx=0, mkIy=0, mkIw=0, mkIh=0;
+
+function getSteps() {
+  if (S.markMode === 'side') return SIDE_STEPS;
+  if (S.markMode === 'height')
+    return S.heightMode === 'bifocal_flap' ? HEIGHT_STEPS_EYELID : HEIGHT_STEPS_PUPIL;
+  return FRONT_STEPS;
+}
+
+function initMarking() {
+  S.markers = []; S.markStep = 0; S.scaleMMpx = null;
+  var titleMap = {
+    front: 'DP — Marcar Puntos',
+    side:  'Lateral — Marcar Puntos',
+    height:'Altura '+(HEIGHT_TYPE_LABEL[S.heightMode]||'')+' — Marcar'
+  };
+  document.getElementById('mark-title').textContent = titleMap[S.markMode] || 'Marcar Puntos';
+  go('s-mark');
+  setTimeout(function() {
+    var wrap = document.getElementById('mark-wrap');
+    mkCanvas.width  = wrap.clientWidth  || window.innerWidth;
+    mkCanvas.height = wrap.clientHeight || (window.innerHeight - 250);
+    mkImg = new Image();
+    mkImg.onload = function() {
+      var ir = mkImg.width/mkImg.height, cr = mkCanvas.width/mkCanvas.height;
+      if (ir > cr) { mkIw = mkCanvas.width;  mkIh = mkCanvas.width/ir; }
+      else          { mkIh = mkCanvas.height; mkIw = mkCanvas.height*ir; }
+      mkIx = (mkCanvas.width-mkIw)/2; mkIy = (mkCanvas.height-mkIh)/2;
+      redrawMk();
+    };
+    mkImg.src = S.photo;
+    mkCanvas.addEventListener('click', onMkClick);
+    mkCanvas.addEventListener('touchend', onMkTouch, {passive: false});
+    var steps = getSteps();
+    drawStepsBar(steps); setInstr(steps, 0); updateMarkBtn();
+  }, 80);
+}
+
+function onMkClick(e) {
+  var r = e.currentTarget.getBoundingClientRect();
+  placeMark(e.clientX - r.left, e.clientY - r.top);
+}
+function onMkTouch(e) {
+  e.preventDefault();
+  var r = e.currentTarget.getBoundingClientRect();
+  var t = e.changedTouches[0];
+  placeMark(t.clientX - r.left, t.clientY - r.top);
+  if (navigator.vibrate) navigator.vibrate(25);
+}
+function placeMark(x, y) {
+  var steps = getSteps();
+  if (S.markStep >= steps.length) return;
+  var st = steps[S.markStep];
+  S.markers = S.markers.filter(function(m){ return m.id !== st.id; });
+  S.markers.push({id: st.id, x: x, y: y, color: st.color, si: S.markStep});
+  S.markStep++;
+  calcManual(); redrawMk(); drawStepsBar(steps);
+  if (S.markStep < steps.length) setInstr(steps, S.markStep);
+  else {
+    document.getElementById('instr-t').textContent = '✅ Todos los puntos marcados';
+    document.getElementById('instr-d').textContent = 'Revise la imagen y pulse Continuar.';
+  }
+  updateMarkBtn();
+}
+function undoMark() {
+  if (S.markStep === 0) return;
+  S.markStep--;
+  var steps = getSteps();
+  S.markers = S.markers.filter(function(m){ return m.id !== steps[S.markStep].id; });
+  redrawMk(); drawStepsBar(steps); setInstr(steps, S.markStep); calcManual(); updateMarkBtn();
+}
+function retake() {
+  S.camMode = S.markMode; S.measureMode = 'manual';
+  go('s-cam'); updateModeBtns(); startCam();
+}
+function updateMarkBtn() {
+  var steps = getSteps();
+  document.getElementById('mark-next').disabled = S.markStep < steps.length;
+}
+function markDone() {
+  S.result.date = new Date().toISOString();
+  go('s-results');
+}
+
+function redrawMk() {
+  mkCtx.clearRect(0, 0, mkCanvas.width, mkCanvas.height);
+  mkCtx.fillStyle = '#000'; mkCtx.fillRect(0, 0, mkCanvas.width, mkCanvas.height);
+  if (mkImg && mkIw) mkCtx.drawImage(mkImg, mkIx, mkIy, mkIw, mkIh);
+  var g = function(id){ return S.markers.find(function(m){ return m.id===id; }); };
+  function dline(a, b, c) {
+    if (!a||!b) return;
+    mkCtx.beginPath(); mkCtx.moveTo(a.x,a.y); mkCtx.lineTo(b.x,b.y);
+    mkCtx.strokeStyle = c; mkCtx.lineWidth = 2; mkCtx.setLineDash([6,4]); mkCtx.stroke(); mkCtx.setLineDash([]);
+  }
+  dline(g('r1'),g('r2'),'#ffd166'); dline(g('od'),g('oi'),'#00c6e0');
+  dline(g('nb'),g('od'),'#00c6e088'); dline(g('nb'),g('oi'),'#0077b688');
+  dline(g('lt'),g('lb'),'#06d6a0'); dline(g('co'),g('lb2'),'#ef476f');
+  dline(g('sr1'),g('sr2'),'#ffd166');
+  // Height mode lines
+  dline(g('pod'),g('bod'),'#00c6e0'); dline(g('poi'),g('boi'),'#0077b6');
+  var steps = getSteps();
+  S.markers.forEach(function(m) {
+    mkCtx.beginPath(); mkCtx.arc(m.x,m.y,18,0,Math.PI*2); mkCtx.fillStyle=m.color+'30'; mkCtx.fill();
+    mkCtx.beginPath(); mkCtx.arc(m.x,m.y,6,0,Math.PI*2); mkCtx.fillStyle=m.color; mkCtx.fill();
+    mkCtx.strokeStyle='#fff'; mkCtx.lineWidth=1.5; mkCtx.stroke();
+    var lbl = steps[m.si] ? steps[m.si].lbl : '';
+    mkCtx.font = 'bold 11px sans-serif';
+    mkCtx.lineWidth = 3; mkCtx.strokeStyle = 'rgba(0,0,0,.8)';
+    mkCtx.strokeText(lbl, m.x+10, m.y-8);
+    mkCtx.fillStyle = '#fff'; mkCtx.fillText(lbl, m.x+10, m.y-8);
+  });
+}
+
+function mmd(a, b) { return Math.sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)); }
+
+function calcManual() {
+  var g = function(id){ return S.markers.find(function(m){ return m.id===id; }); };
+  var r1 = g('r1')||g('sr1'), r2 = g('r2')||g('sr2');
+  if (r1 && r2) S.scaleMMpx = CFG.refMM / mmd(r1, r2);
+  var chips = [];
+  if (S.markMode === 'front') {
+    var od=g('od'), oi=g('oi'), nb=g('nb');
+    if (od&&oi&&S.scaleMMpx) { var t=+(mmd(od,oi)*S.scaleMMpx).toFixed(1); S.result.pdTotal=t; chips.push({l:'DP Total',v:t+' mm'}); }
+    if (nb&&od&&S.scaleMMpx) { var od_=+(mmd(nb,od)*S.scaleMMpx).toFixed(1); S.result.pdOD=od_; chips.push({l:'OD',v:od_+' mm'}); }
+    if (nb&&oi&&S.scaleMMpx) { var oi_=+(mmd(nb,oi)*S.scaleMMpx).toFixed(1); S.result.pdOI=oi_; chips.push({l:'OI',v:oi_+' mm'}); }
+  } else if (S.markMode === 'height') {
+    // Height = VERTICAL distance from anatomical ref (pupil/eyelid) to bottom of frame
+    var pod=g('pod'), poi=g('poi'), bod=g('bod'), boi=g('boi');
+    if (pod&&bod&&S.scaleMMpx) {
+      var hod = +(Math.abs(pod.y - bod.y) * S.scaleMMpx).toFixed(1);
+      S.result.altOD = hod; S.result.altType = S.heightMode;
+      chips.push({l:'Altura OD', v:hod+' mm'});
+    }
+    if (poi&&boi&&S.scaleMMpx) {
+      var hoi = +(Math.abs(poi.y - boi.y) * S.scaleMMpx).toFixed(1);
+      S.result.altOI = hoi; S.result.altType = S.heightMode;
+      chips.push({l:'Altura OI', v:hoi+' mm'});
+    }
+  } else {
+    var lt=g('lt'), lb=g('lb'), co=g('co'), lb2=g('lb2');
+    if (lt&&lb) {
+      var dx=lb.x-lt.x, dy=lb.y-lt.y;
+      var ang = +(Math.atan2(Math.abs(dx), Math.abs(dy))*180/Math.PI).toFixed(1);
+      S.result.pantoAngle = ang; chips.push({l:'Pantoscópico',v:ang+'°'});
+    }
+    if (co&&lb2&&S.scaleMMpx) { var vd=+(mmd(co,lb2)*S.scaleMMpx).toFixed(1); S.result.vertDist=vd; chips.push({l:'Vértice',v:vd+' mm'}); }
+  }
+  var bar = document.getElementById('live-bar');
+  bar.innerHTML = chips.length
+    ? chips.map(function(c){ return '<div class="lchip"><span style="color:var(--mut)">'+c.l+'</span>&nbsp;<b>'+c.v+'</b></div>'; }).join('')
+    : '<span style="font-size:12px;color:var(--mut)">Marque los puntos para ver resultados</span>';
+}
+
+function drawStepsBar(steps) {
+  var sb = document.getElementById('steps-bar');
+  var html = '';
+  steps.forEach(function(st, i) {
+    if (i > 0) html += '<div class="sline'+(i<=S.markStep?' done':'')+'"></div>';
+    var cls = i < S.markStep ? 'sdot done' : i===S.markStep ? 'sdot on' : 'sdot';
+    html += '<div class="'+cls+'">'+(i < S.markStep ? '✓' : (i+1))+'</div>';
+  });
+  sb.innerHTML = html;
+}
+function setInstr(steps, i) {
+  if (i >= steps.length) return;
+  document.getElementById('instr-t').textContent = steps[i].title;
+  document.getElementById('instr-d').textContent = steps[i].desc;
+}
+
+/* ══════════════════════════════════════════════════════
+   RESULTS
+══════════════════════════════════════════════════════ */
+function renderRes() {
+  var r = S.result;
+  if (!r) return;
+  document.getElementById('res-pat').innerHTML = S.patient
+    ? '<div style="font-size:17px;font-weight:800">'+esc(S.patient.name)+'</div>'
+    : '<div style="color:var(--mut);font-size:13px">Sin paciente asignado</div>';
+  document.getElementById('res-date').textContent = '📅 ' + fmtDate(r.date);
+  document.getElementById('res-pd').innerHTML =
+    (r.pdTotal?'<div class="rc s2"><div class="rl">DP Binocular (Total)</div><div class="rv">'+r.pdTotal+'<span class="ru"> mm</span></div></div>':'')+
+    '<div class="rc"><div class="rl">DP — Ojo Derecho (OD)</div>'+(r.pdOD?'<div class="rv">'+r.pdOD+'<span class="ru"> mm</span></div>':'<div class="re">—</div>')+'</div>'+
+    '<div class="rc"><div class="rl">DP — Ojo Izquierdo (OI)</div>'+(r.pdOI?'<div class="rv">'+r.pdOI+'<span class="ru"> mm</span></div>':'<div class="re">—</div>')+'</div>';
+  document.getElementById('res-lens').innerHTML =
+    '<div class="rc"><div class="rl">Ángulo Pantoscópico</div>'+(r.pantoAngle?'<div class="rv">'+r.pantoAngle+'<span class="ru">°</span></div>':'<div class="re">—</div>')+'</div>'+
+    '<div class="rc"><div class="rl">Ángulo Panorámico</div>'+(r.panoAngle?'<div class="rv">'+r.panoAngle+'<span class="ru">°</span></div>':'<div class="re">—</div>')+'</div>'+
+    '<div class="rc s2"><div class="rl">Distancia al Vértice</div>'+(r.vertDist?'<div class="rv">'+r.vertDist+'<span class="ru"> mm</span></div>':'<div class="re">—</div>')+'</div>';
+  // Height results
+  var hasHeight = r.altOD || r.altOI;
+  document.getElementById('res-heights-hdr').style.display = hasHeight ? 'flex' : 'none';
+  document.getElementById('res-heights').style.display = hasHeight ? 'grid' : 'none';
+  if (hasHeight) {
+    document.getElementById('res-height-type-lbl').textContent =
+      'ALTURA — ' + (HEIGHT_TYPE_LABEL[r.altType] || 'LENTE').toUpperCase();
+    document.getElementById('res-heights').innerHTML =
+      '<div class="rc"><div class="rl">Altura OD</div>' +
+      (r.altOD ? '<div class="rv">'+r.altOD+'<span class="ru"> mm</span></div>' : '<div class="re">—</div>') + '</div>' +
+      '<div class="rc"><div class="rl">Altura OI</div>' +
+      (r.altOI ? '<div class="rv">'+r.altOI+'<span class="ru"> mm</span></div>' : '<div class="re">—</div>') + '</div>';
+  }
+  document.getElementById('iris-note').style.display = r.usedAI ? 'block' : 'none';
+  var sb = document.getElementById('save-btn');
+  sb.textContent = S.saved ? '✓ Guardado' : '💾 Guardar';
+  sb.disabled = S.saved;
+}
+function saveRes() {
+  if (!S.result) return;
+  S.result.id = S.result.id || uid();
+  var mes = DB.mes().filter(function(m){ return m.id !== S.result.id; });
+  mes.unshift(Object.assign({}, S.result)); DB.sM(mes);
+  S.saved = true;
+  document.getElementById('save-btn').textContent = '✓ Guardado';
+  document.getElementById('save-btn').disabled = true;
+  toast('Medición guardada ✓','ok');
+}
+function shareRes() {
+  var r = S.result; if (!r) return;
+  var txt = '📊 MEDICIÓN ÓPTICA\n';
+  if (S.patient) txt += 'Paciente: '+S.patient.name+'\n';
+  txt += 'Fecha: '+fmtDate(r.date)+'\n\n';
+  if (r.pdTotal)    txt += 'DP Binocular: '+r.pdTotal+' mm\n';
+  if (r.pdOD)       txt += 'DP OD: '+r.pdOD+' mm\n';
+  if (r.pdOI)       txt += 'DP OI: '+r.pdOI+' mm\n';
+  if (r.pantoAngle) txt += 'Ángulo Pantoscópico: '+r.pantoAngle+'°\n';
+  if (r.panoAngle)  txt += 'Ángulo Panorámico: '+r.panoAngle+'°\n';
+  if (r.vertDist)   txt += 'Distancia al Vértice: '+r.vertDist+' mm\n';
+  if (r.altOD||r.altOI) {
+    txt += '\nAltura ('+(HEIGHT_TYPE_LABEL[r.altType]||'Lente')+'):\n';
+    if (r.altOD) txt += '  OD: '+r.altOD+' mm\n';
+    if (r.altOI) txt += '  OI: '+r.altOI+' mm\n';
+  }
+  txt += '\n— OpticMed';
+  if (navigator.share) navigator.share({title:'Medición Óptica', text:txt}).catch(function(){});
+  else if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ toast('Copiado al portapapeles','ok'); });
+}
+
+/* ══════════════════════════════════════════════════════
+   EXTRA + SETTINGS
+══════════════════════════════════════════════════════ */
+function swTab(t) {
+  document.getElementById('ex-side').style.display = t==='side' ? 'block' : 'none';
+  document.getElementById('ex-man').style.display  = t==='man'  ? 'block' : 'none';
+  document.getElementById('ex-alt').style.display  = t==='alt'  ? 'block' : 'none';
+  document.getElementById('t-side').className = 'tab'+(t==='side'?' on':'');
+  document.getElementById('t-man').className  = 'tab'+(t==='man' ?' on':'');
+  document.getElementById('t-alt').className  = 'tab'+(t==='alt' ?' on':'');
+  if (t==='man' && S.result) {
+    var r = S.result;
+    if (r.pantoAngle) document.getElementById('m-panto').value = r.pantoAngle;
+    if (r.panoAngle)  document.getElementById('m-pano').value  = r.panoAngle;
+    if (r.vertDist)   document.getElementById('m-vert').value  = r.vertDist;
+  }
+}
+function openHeightModal() {
+  document.getElementById('htype-modal').classList.add('open');
+}
+function closeHeightModal() {
+  document.getElementById('htype-modal').classList.remove('open');
+}
+function startHeightMeasurement(type) {
+  closeHeightModal();
+  S.heightMode = type;
+  S.camMode    = 'front';
+  S.measureMode = S.aiReady ? 'ai' : 'manual';
+  go('s-cam');
+  updateModeBtns();
+  startCam();
+}
+function saveExtra() {
+  var manVis = document.getElementById('ex-man').style.display !== 'none';
+  if (manVis && S.result) {
+    var p = parseFloat(document.getElementById('m-panto').value);
+    var n = parseFloat(document.getElementById('m-pano').value);
+    var v = parseFloat(document.getElementById('m-vert').value);
+    if (!isNaN(p)) S.result.pantoAngle = p;
+    if (!isNaN(n)) S.result.panoAngle  = n;
+    if (!isNaN(v)) S.result.vertDist   = v;
+    S.saved = false;
+  }
+  go('s-results');
+}
+function loadCfg() {
+  var c = DB.cfg();
+  if (c.opticaName) document.getElementById('cfg-name').value = c.opticaName;
+  var refSel = document.getElementById('cfg-ref');
+  if (c.refMM) {
+    for (var i=0; i<refSel.options.length; i++) {
+      if (refSel.options[i].value == c.refMM) { refSel.selectedIndex=i; break; }
+    }
+  }
+  document.getElementById('cfg-iris').value = c.irisMM || 11.7;
+  CFG.irisMM = parseFloat(c.irisMM || 11.7);
+  CFG.refMM  = parseFloat(refSel.value);
+  // Show camera context info
+  var info = '';
+  if (location.protocol === 'file:') info = '⚠️ Archivo local — cámara puede no funcionar. Abre desde internet (HTTPS).';
+  else if (location.protocol === 'https:') info = '✅ HTTPS — cámara disponible.';
+  else info = '⚠️ HTTP — cámara puede no funcionar. Usa HTTPS.';
+  document.getElementById('cfg-cam-info').textContent = info;
+}
+function saveCfg() {
+  var cfg = {
+    opticaName: document.getElementById('cfg-name').value,
+    refMM:  document.getElementById('cfg-ref').value,
+    irisMM: document.getElementById('cfg-iris').value
+  };
+  DB.sC(cfg);
+  CFG.irisMM = parseFloat(cfg.irisMM);
+  CFG.refMM  = parseFloat(cfg.refMM);
+  toast('Configuración guardada ✓','ok');
+}
+function clearAll() {
+  if (!confirm('¿Borrar TODOS los datos?')) return;
+  localStorage.removeItem('om_p'); localStorage.removeItem('om_m');
+  toast('Datos eliminados','ok'); go('s-home');
+}
+
+/* ══════════════════════════════════════════════════════
+   UTILITIES
+══════════════════════════════════════════════════════ */
+function toast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show '+(type||'');
+  clearTimeout(el._t); el._t = setTimeout(function(){ el.classList.remove('show'); }, 3500);
+}
+function fmtDate(d) {
+  if (!d) return '';
+  try { return new Date(d).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+  catch(e) { return d; }
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ══════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════ */
+(function() {
+  try {
+    var c = DB.cfg();
+    CFG.irisMM = parseFloat(c.irisMM || 11.7);
+    CFG.refMM  = parseFloat(c.refMM  || 85.6);
+    S.result   = makeResult();
+    renderPats();
+    // Load AI in background after 1s — uses script tag, no import()
+    setTimeout(function() { initAI(); }, 1000);
+  } catch(e) {
+    var ge = document.getElementById('g-err');
+    if (ge) { ge.style.display='block'; ge.textContent='Error al iniciar: '+e.message; }
+  }
+})();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#080f1e">
+  <title>OpticMed</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#080f1e;--bg2:#0f1d35;--card:#132440;--bdr:#1c3356;
+      --acc:#00c6e0;--acc2:#0077b6;--ok:#06d6a0;--warn:#ffd166;--err:#ef476f;
+      --txt:#e6f1fa;--mut:#6b90b0;
+      --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px)
+    }
+    html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      -webkit-tap-highlight-color:transparent;user-select:none}
+    #app{height:100%;position:relative;overflow:hidden}
+    .scr{display:none;flex-direction:column;position:absolute;inset:0;
+         height:100%;background:var(--bg);overflow:hidden}
+    .scr.on{display:flex}
+    .hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;
+         padding-top:calc(12px + var(--st));background:var(--bg2);
+         border-bottom:1px solid var(--bdr);flex-shrink:0}
+    .hdr h1{flex:1;font-size:17px;font-weight:700}
+    .ico{background:none;border:none;color:var(--txt);font-size:20px;
+         padding:6px 8px;cursor:pointer;border-radius:8px;line-height:1}
+    .ico:active{background:rgba(255,255,255,.1)}
+    .scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px}
+    .abar{padding:12px 14px;padding-bottom:calc(12px + var(--sb));
+          background:var(--bg2);border-top:1px solid var(--bdr);flex-shrink:0;display:flex;gap:8px}
+    .btn{border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;
+         cursor:pointer;transition:opacity .15s;display:flex;align-items:center;
+         justify-content:center;gap:6px;width:100%}
+    .btn:active{opacity:.75}.btn:disabled{opacity:.4;pointer-events:none}
+    .f1{flex:1;width:auto}.fw{width:100%}
+    .bp{background:var(--acc);color:#000}
+    .bg{background:var(--card);color:var(--txt);border:1px solid var(--bdr)}
+    .bs{background:var(--ok);color:#000}
+    .bd{background:transparent;color:var(--err);border:1px solid var(--err)}
+    .sm{padding:9px 14px;font-size:13px;border-radius:8px}
+    .card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:14px;margin-bottom:10px}
+    .lbl{display:block;font-size:12px;color:var(--mut);margin-bottom:5px}
+    .inp{width:100%;padding:13px 14px;background:var(--card);border:1px solid var(--bdr);
+         border-radius:10px;color:var(--txt);font-size:16px;outline:none;appearance:none}
+    .inp:focus{border-color:var(--acc)}
+    textarea.inp{resize:none}
+    .srch{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--bdr);
+          border-radius:10px;padding:10px 14px;margin-bottom:14px}
+    .srch input{flex:1;background:none;border:none;color:var(--txt);font-size:15px;outline:none}
+    .prow{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--card);
+          border:1px solid var(--bdr);border-radius:12px;margin-bottom:8px;cursor:pointer}
+    .prow:active{background:var(--bg2)}
+    .av{width:42px;height:42px;border-radius:50%;background:var(--acc2);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0}
+    .pn{font-weight:600;font-size:15px}.pm{font-size:12px;color:var(--mut);margin-top:2px}
+    .ch{color:var(--mut);font-size:18px;margin-left:auto}
+    .empty{text-align:center;padding:48px 24px;color:var(--mut)}
+    .empty .ei{font-size:44px;margin-bottom:12px}
+    .empty p{font-size:14px;line-height:1.6}
+    .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .sh h2{font-size:13px;font-weight:700;color:var(--acc);letter-spacing:.5px}
+    /* CAMERA */
+    #s-cam{background:#000}
+    #cam-wrap{flex:1;position:relative;overflow:hidden;background:#000}
+    #cam-canvas{display:block;width:100%;height:100%;touch-action:none}
+    .cam-top{position:absolute;top:0;left:0;right:0;z-index:20;
+             display:flex;align-items:center;gap:10px;padding:12px 14px;
+             padding-top:calc(12px + var(--st));
+             background:linear-gradient(rgba(0,0,0,.8),transparent)}
+    .cam-top-title{flex:1;font-size:15px;font-weight:700;color:#fff}
+    .pill{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);
+          border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:#fff;cursor:pointer}
+    .pill:active{background:rgba(255,255,255,.3)}
+    .ai-badge{position:absolute;top:calc(54px + var(--st));left:50%;
+              transform:translateX(-50%);z-index:20;
+              border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700;
+              pointer-events:none;transition:all .3s;white-space:nowrap}
+    .ab-load{background:rgba(0,198,224,.15);border:1px solid #00c6e0;color:#00c6e0}
+    .ab-seek{background:rgba(255,209,102,.15);border:1px solid #ffd166;color:#ffd166}
+    .ab-ok  {background:rgba(6,214,160,.15);border:1px solid #06d6a0;color:#06d6a0}
+    .ab-err {background:rgba(239,71,111,.15);border:1px solid #ef476f;color:#ef476f}
+    .dp-overlay{position:absolute;left:0;right:0;bottom:0;z-index:15;
+                background:linear-gradient(transparent,rgba(0,0,0,.9));
+                padding:18px 16px 0;pointer-events:none}
+    .dp-big{text-align:center;margin-bottom:4px}
+    .dp-num{font-size:48px;font-weight:900;color:var(--acc);line-height:1;
+            text-shadow:0 0 20px rgba(0,198,224,.5)}
+    .dp-unit{font-size:14px;color:rgba(255,255,255,.6)}
+    .dp-row{display:flex;justify-content:center;gap:10px;margin:6px 0 12px}
+    .dpc{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);
+         border-radius:8px;padding:5px 12px;font-size:12px;color:#fff;text-align:center}
+    .dpc b{color:var(--acc);font-weight:800}
+    .mode-bar{display:flex;background:rgba(0,0,0,.8);flex-shrink:0;z-index:20}
+    .mode-btn{flex:1;padding:10px;border:none;background:transparent;
+              color:var(--mut);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.5px}
+    .mode-btn.on{color:var(--acc);border-bottom:2px solid var(--acc)}
+    .cam-ctrl{display:flex;align-items:center;justify-content:space-between;
+              padding:14px 28px;padding-bottom:calc(14px + var(--sb));
+              background:rgba(0,0,0,.95);flex-shrink:0;z-index:20}
+    .shutter{width:72px;height:72px;border-radius:50%;background:#fff;
+             border:4px solid rgba(255,255,255,.3);cursor:pointer;
+             display:flex;align-items:center;justify-content:center}
+    .shutter:active{transform:scale(.92)}
+    .si{width:58px;height:58px;border-radius:50%;background:var(--ok);transition:background .3s}
+    .si.dim{background:#444}
+    .cbtn{width:50px;height:50px;border-radius:50%;cursor:pointer;
+          display:flex;align-items:center;justify-content:center;font-size:22px;
+          background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);color:#fff}
+    .cbtn:active{background:rgba(255,255,255,.3)}
+    .cbtn.lit{background:var(--warn);border-color:var(--warn);color:#000}
+    /* Camera error state */
+    #cam-err-box{display:none;position:absolute;inset:0;z-index:50;
+                 background:rgba(8,15,30,.96);flex-direction:column;
+                 align-items:center;justify-content:center;padding:28px;gap:16px}
+    #cam-err-icon{font-size:48px}
+    #cam-err-msg{font-size:14px;color:var(--txt);text-align:center;line-height:1.7;
+                 background:var(--card);border:1px solid var(--bdr);border-radius:12px;
+                 padding:16px;width:100%}
+    #cam-err-retry{padding:13px 28px;border:none;border-radius:12px;
+                   background:var(--acc);color:#000;font-size:15px;font-weight:700;cursor:pointer}
+    /* MARKING */
+    #s-mark{background:#000}
+    .mark-hdr{display:flex;align-items:center;gap:8px;flex-shrink:0;
+              padding:10px 14px;padding-top:calc(10px + var(--st));
+              background:var(--bg2);border-bottom:1px solid var(--bdr)}
+    .mark-title{flex:1;font-size:15px;font-weight:700}
+    .steps-bar{display:flex;gap:3px;padding:10px 14px;
+               background:var(--bg2);border-bottom:1px solid var(--bdr);flex-shrink:0;overflow-x:auto}
+    .sdot{flex-shrink:0;width:28px;height:28px;border-radius:50%;
+          display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+          background:var(--bg);color:var(--mut);border:2px solid var(--bdr)}
+    .sdot.on{background:var(--acc);color:#000;border-color:var(--acc)}
+    .sdot.done{background:var(--ok);color:#000;border-color:var(--ok);font-size:13px}
+    .sline{flex:1;height:2px;background:var(--bdr);align-self:center;min-width:6px}
+    .sline.done{background:var(--ok)}
+    .instr{padding:10px 14px;background:var(--bg2);border-bottom:1px solid var(--bdr);flex-shrink:0}
+    .instr h3{font-size:13px;font-weight:700;margin-bottom:3px}
+    .instr p{font-size:12px;color:var(--mut);line-height:1.5}
+    #mark-wrap{flex:1;position:relative;overflow:hidden;touch-action:none}
+    #mark-canvas{display:block;position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+    .live-bar{display:flex;flex-wrap:wrap;gap:5px;padding:8px 14px;
+              background:rgba(8,15,30,.97);border-top:1px solid var(--bdr);
+              flex-shrink:0;min-height:44px;align-items:center}
+    .lchip{display:flex;align-items:center;gap:5px;background:var(--card);
+           border:1px solid var(--bdr);border-radius:7px;padding:4px 10px;font-size:12px}
+    .lchip b{color:var(--acc);font-weight:800}
+    /* RESULTS */
+    .rgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+    .rc{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:12px 14px;text-align:center}
+    .rc.s2{grid-column:span 2}
+    .rl{font-size:11px;color:var(--mut);margin-bottom:5px}
+    .rv{font-size:26px;font-weight:900;color:var(--acc);line-height:1}
+    .ru{font-size:13px;color:var(--mut)}
+    .re{font-size:13px;color:var(--mut)}
+    .hi{background:var(--card);border:1px solid var(--bdr);border-radius:12px;
+        padding:12px 14px;margin-bottom:8px;cursor:pointer}
+    .hi:active{background:var(--bg2)}
+    .hd{font-size:12px;color:var(--mut);margin-bottom:8px}
+    .hvs{display:flex;gap:14px;flex-wrap:wrap}
+    .hv .hvl{font-size:11px;color:var(--mut)}.hv .hvn{font-size:17px;font-weight:800}
+    .mr{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:12px 14px;
+        background:var(--card);border:1px solid var(--bdr);border-radius:10px}
+    .ml{flex:1;font-size:14px}
+    .mf{width:74px;padding:9px;background:var(--bg);border:1px solid var(--bdr);
+        border-radius:8px;color:var(--txt);font-size:16px;text-align:center;outline:none}
+    .mf:focus{border-color:var(--acc)}
+    .mu{font-size:12px;color:var(--mut);width:22px}
+    .tabs{display:flex;gap:6px;padding:10px 14px;background:var(--bg2);flex-shrink:0}
+    .tab{flex:1;padding:9px;border-radius:8px;border:none;
+         background:var(--bg);color:var(--mut);font-size:13px;font-weight:600;cursor:pointer}
+    .tab.on{background:var(--acc);color:#000}
+    .ibox{background:rgba(0,198,224,.07);border:1px solid rgba(0,198,224,.25);
+          border-radius:10px;padding:12px 14px;font-size:12px;color:var(--mut);
+          line-height:1.75;margin-bottom:12px}
+    .ibox strong{color:var(--acc)}
+    .det-info{font-size:13px;color:var(--mut);line-height:2}
+    /* toast */
+    #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(16px);
+           background:var(--card);border:1px solid var(--bdr);border-radius:10px;
+           padding:11px 20px;font-size:13px;opacity:0;transition:all .25s;
+           pointer-events:none;z-index:999;white-space:nowrap;max-width:88vw}
+    #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    #toast.ok{border-color:var(--ok);color:var(--ok)}
+    #toast.err{border-color:var(--err);color:var(--err)}
+    /* global error banner */
+    #g-err{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;
+           background:var(--err);color:#fff;font-size:12px;padding:8px 14px;
+           padding-top:calc(8px + var(--st));line-height:1.4;cursor:pointer}
+    /* scan animation */
+    @keyframes scan{0%{top:8%;opacity:1}90%{top:90%;opacity:1}100%{top:90%;opacity:0}}
+    .scan-line{position:absolute;left:6%;right:6%;height:2px;
+               background:linear-gradient(90deg,transparent,var(--acc),transparent);
+               animation:scan 2s ease-in-out infinite;pointer-events:none;z-index:10;
+               box-shadow:0 0 10px rgba(0,198,224,.6)}
   </style>
 </head>
 <body>
