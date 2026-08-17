@@ -388,7 +388,7 @@
       <button class="tab"    id="t-alt"  onclick="swTab('alt')">📏 Alturas</button>
     </div>
     <div class="scroll" id="ex-side">
-      <div class="ibox"><strong>Foto lateral:</strong> paciente con sus lentes puestos. Cámara exactamente al costado del ojo. Paciente sostiene tarjeta verticalmente como escala.</div>
+      <div class="ibox"><strong>Foto lateral:</strong> paciente con sus lentes puestos. Cámara exactamente al costado del ojo. Se marcarán dos puntos del marco como escala.</div>
       <button class="btn bp fw" onclick="startSideMode()">📷 Tomar Foto Lateral</button>
     </div>
     <div class="scroll" id="ex-man" style="display:none">
@@ -435,12 +435,19 @@
     <div class="scroll">
       <div style="margin-bottom:14px"><label class="lbl">Nombre de la Óptica</label>
         <input class="inp" id="cfg-name" placeholder="Mi Óptica"></div>
-      <div style="margin-bottom:14px"><label class="lbl">Referencia escala (ancho de tarjeta de crédito)</label>
-        <select class="inp" id="cfg-ref">
-          <option value="85.6">Tarjeta de crédito — ancho 85.6 mm</option>
-          <option value="54">Tarjeta de crédito — alto 54 mm</option>
-          <option value="100">Regla de 100 mm</option>
+      <div style="margin-bottom:14px"><label class="lbl">Referencia de escala (modo manual)</label>
+        <select class="inp" id="cfg-ref" onchange="onRefSelChange()">
+          <option value="52">Puente del marco — ancho total 52 mm</option>
+          <option value="54">Puente del marco — ancho total 54 mm</option>
+          <option value="56">Puente del marco — ancho total 56 mm</option>
+          <option value="58">Puente del marco — ancho total 58 mm</option>
+          <option value="custom">Otro valor (ingresar mm)…</option>
         </select>
+        <div id="cfg-ref-custom" style="display:none;margin-top:8px">
+          <input class="inp" id="cfg-ref-mm" type="number" placeholder="ej: 46" step="0.5" min="10" max="200">
+          <p style="font-size:12px;color:var(--mut);margin-top:4px">Distancia en mm entre los dos puntos que marcará en el marco.</p>
+        </div>
+        <p style="font-size:12px;color:var(--mut);margin-top:5px">Al tomar la foto pedirá marcar dos puntos del marco cuya distancia sea la ingresada aquí.</p>
       </div>
       <div style="margin-bottom:14px"><label class="lbl">Diámetro iris para calibración IA (mm)</label>
         <input class="inp" id="cfg-iris" type="number" placeholder="11.7" step="0.1" min="10" max="14">
@@ -463,7 +470,7 @@
 <div id="htype-modal" onclick="if(event.target===this)closeHeightModal()">
   <div class="hmodal-box">
     <h3>📏 Tipo de Lente</h3>
-    <p class="hm-sub">Paciente con lentes puestos, mirando de frente.<br>Sostenga la tarjeta de referencia bajo la nariz.</p>
+    <p class="hm-sub">Paciente con lentes puestos, mirando de frente.<br>Se usarán dos puntos del marco como referencia de escala.</p>
     <div class="hopt">
       <button class="hopt-btn" onclick="startHeightMeasurement('multifocal')">
         <div class="hopt-title">🔵 Multifocal</div>
@@ -1370,10 +1377,10 @@ async function flipCam() {
    MANUAL MARKING
 ══════════════════════════════════════════════════════ */
 var FRONT_STEPS = [
-  {id:'r1', lbl:'Ref 1',    title:'📍 Referencia — Borde Izquierdo',
-   desc:'Toque el borde izquierdo de la tarjeta de crédito que sostiene el paciente bajo la nariz.', color:'#ffd166'},
-  {id:'r2', lbl:'Ref 2',    title:'📍 Referencia — Borde Derecho',
-   desc:'Toque el borde derecho de la tarjeta para establecer la escala de medición.', color:'#ffd166'},
+  {id:'r1', lbl:'Ref 1',    title:'📍 Marco — Extremo Izquierdo',
+   desc:'Toque el extremo izquierdo del marco del lente (punto de referencia de escala).', color:'#ffd166'},
+  {id:'r2', lbl:'Ref 2',    title:'📍 Marco — Extremo Derecho',
+   desc:'Toque el extremo derecho del marco (misma distancia configurada en ajustes).', color:'#ffd166'},
   {id:'nb', lbl:'Puente',   title:'🟢 Centro del Puente Nasal',
    desc:'Toque el punto central del puente de la nariz (entre los ojos).', color:'#06d6a0'},
   {id:'od', lbl:'Pupila OD',title:'🔵 Pupila — Ojo Derecho del paciente',
@@ -1382,10 +1389,10 @@ var FRONT_STEPS = [
    desc:'Toque el centro exacto de la pupila del ojo IZQUIERDO del paciente.', color:'#0077b6'}
 ];
 var SIDE_STEPS = [
-  {id:'sr1',lbl:'Ref ↑',   title:'📍 Referencia — Punto Superior',
-   desc:'Toque el borde SUPERIOR de la tarjeta sostenida verticalmente junto al ojo.', color:'#ffd166'},
-  {id:'sr2',lbl:'Ref ↓',   title:'📍 Referencia — Punto Inferior',
-   desc:'Toque el borde INFERIOR de la tarjeta para establecer escala lateral.', color:'#ffd166'},
+  {id:'sr1',lbl:'Ref ↑',   title:'📍 Marco — Extremo Superior',
+   desc:'Toque el extremo SUPERIOR del marco del lente (referencia de escala lateral).', color:'#ffd166'},
+  {id:'sr2',lbl:'Ref ↓',   title:'📍 Marco — Extremo Inferior',
+   desc:'Toque el extremo INFERIOR del marco para establecer la escala lateral.', color:'#ffd166'},
   {id:'lt', lbl:'Lente ↑', title:'🟢 Borde Superior del Lente',
    desc:'Toque el punto más alto del aro del lente.', color:'#06d6a0'},
   {id:'lb', lbl:'Lente ↓', title:'🟢 Borde Inferior del Lente',
@@ -1398,10 +1405,10 @@ var SIDE_STEPS = [
 
 // Height steps — reference from PUPIL (multifocal / bifocal invisible)
 var HEIGHT_STEPS_PUPIL = [
-  {id:'r1',  lbl:'Ref 1',     title:'📍 Referencia — Borde Izquierdo',
-   desc:'Toque el borde izquierdo de la tarjeta de crédito que sostiene el paciente bajo la nariz.',color:'#ffd166'},
-  {id:'r2',  lbl:'Ref 2',     title:'📍 Referencia — Borde Derecho',
-   desc:'Toque el borde derecho de la tarjeta para establecer la escala de medición.',color:'#ffd166'},
+  {id:'r1',  lbl:'Ref 1',     title:'📍 Marco — Extremo Izquierdo',
+   desc:'Toque el extremo izquierdo del marco del lente (punto de referencia de escala).',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',     title:'📍 Marco — Extremo Derecho',
+   desc:'Toque el extremo derecho del marco (misma distancia configurada en ajustes).',color:'#ffd166'},
   {id:'pod', lbl:'Pupila OD', title:'🔵 Centro Pupila — Ojo Derecho',
    desc:'Toque el centro exacto de la pupila del ojo DERECHO del paciente (con el lente puesto).',color:'#00c6e0'},
   {id:'poi', lbl:'Pupila OI', title:'🔵 Centro Pupila — Ojo Izquierdo',
@@ -1413,10 +1420,10 @@ var HEIGHT_STEPS_PUPIL = [
 ];
 // Height steps — reference from LOWER EYELID (bifocal flap top)
 var HEIGHT_STEPS_EYELID = [
-  {id:'r1',  lbl:'Ref 1',     title:'📍 Referencia — Borde Izquierdo',
-   desc:'Toque el borde izquierdo de la tarjeta de crédito que sostiene el paciente bajo la nariz.',color:'#ffd166'},
-  {id:'r2',  lbl:'Ref 2',     title:'📍 Referencia — Borde Derecho',
-   desc:'Toque el borde derecho de la tarjeta para establecer la escala de medición.',color:'#ffd166'},
+  {id:'r1',  lbl:'Ref 1',     title:'📍 Marco — Extremo Izquierdo',
+   desc:'Toque el extremo izquierdo del marco del lente (punto de referencia de escala).',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',     title:'📍 Marco — Extremo Derecho',
+   desc:'Toque el extremo derecho del marco (misma distancia configurada en ajustes).',color:'#ffd166'},
   {id:'pod', lbl:'Párpado OD',title:'👁️ Párpado Inferior — Ojo Derecho',
    desc:'Toque el punto donde COMIENZA el párpado inferior del ojo DERECHO (no la pupila).',color:'#ef476f'},
   {id:'poi', lbl:'Párpado OI',title:'👁️ Párpado Inferior — Ojo Izquierdo',
@@ -1429,20 +1436,20 @@ var HEIGHT_STEPS_EYELID = [
 
 // AI-height steps: only scale ref + frame bottom (anatomical pts pre-placed by AI)
 var HEIGHT_AI_STEPS_PUPIL = [
-  {id:'r1',  lbl:'Ref 1',    title:'📍 Referencia — Borde Izquierdo',
-   desc:'Toque el borde izquierdo de la tarjeta de crédito bajo la nariz.',color:'#ffd166'},
-  {id:'r2',  lbl:'Ref 2',    title:'📍 Referencia — Borde Derecho',
-   desc:'Toque el borde derecho de la tarjeta para establecer la escala.',color:'#ffd166'},
+  {id:'r1',  lbl:'Ref 1',    title:'📍 Marco — Extremo Izquierdo',
+   desc:'Toque el extremo izquierdo del marco del lente (referencia de escala).',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',    title:'📍 Marco — Extremo Derecho',
+   desc:'Toque el extremo derecho del marco (misma distancia configurada en ajustes).',color:'#ffd166'},
   {id:'bod', lbl:'Marco↓ OD',title:'⬇️ Borde Inferior Marco — OD',
    desc:'Toque el punto más bajo del aro del lente DERECHO (borde interior inferior).',color:'#06d6a0'},
   {id:'boi', lbl:'Marco↓ OI',title:'⬇️ Borde Inferior Marco — OI',
    desc:'Toque el punto más bajo del aro del lente IZQUIERDO (borde interior inferior).',color:'#06d6a0'}
 ];
 var HEIGHT_AI_STEPS_EYELID = [
-  {id:'r1',  lbl:'Ref 1',    title:'📍 Referencia — Borde Izquierdo',
-   desc:'Toque el borde izquierdo de la tarjeta de crédito bajo la nariz.',color:'#ffd166'},
-  {id:'r2',  lbl:'Ref 2',    title:'📍 Referencia — Borde Derecho',
-   desc:'Toque el borde derecho de la tarjeta para establecer la escala.',color:'#ffd166'},
+  {id:'r1',  lbl:'Ref 1',    title:'📍 Marco — Extremo Izquierdo',
+   desc:'Toque el extremo izquierdo del marco del lente (referencia de escala).',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',    title:'📍 Marco — Extremo Derecho',
+   desc:'Toque el extremo derecho del marco (misma distancia configurada en ajustes).',color:'#ffd166'},
   {id:'bod', lbl:'Marco↓ OD',title:'⬇️ Borde Inferior Marco — OD',
    desc:'Toque el punto más bajo del aro del lente DERECHO (borde interior inferior).',color:'#06d6a0'},
   {id:'boi', lbl:'Marco↓ OI',title:'⬇️ Borde Inferior Marco — OI',
@@ -1771,18 +1778,38 @@ function saveExtra() {
   }
   go('s-results');
 }
+function onRefSelChange() {
+  var sel = document.getElementById('cfg-ref');
+  var isCustom = sel.value === 'custom';
+  document.getElementById('cfg-ref-custom').style.display = isCustom ? 'block' : 'none';
+}
+function getRefMM() {
+  var sel = document.getElementById('cfg-ref');
+  if (sel.value === 'custom') {
+    var v = parseFloat(document.getElementById('cfg-ref-mm').value);
+    return isNaN(v) ? 54 : v;
+  }
+  return parseFloat(sel.value);
+}
 function loadCfg() {
   var c = DB.cfg();
   if (c.opticaName) document.getElementById('cfg-name').value = c.opticaName;
   var refSel = document.getElementById('cfg-ref');
   if (c.refMM) {
-    for (var i=0; i<refSel.options.length; i++) {
-      if (refSel.options[i].value == c.refMM) { refSel.selectedIndex=i; break; }
+    var matched = false;
+    for (var i = 0; i < refSel.options.length; i++) {
+      if (refSel.options[i].value == c.refMM) { refSel.selectedIndex = i; matched = true; break; }
+    }
+    if (!matched && c.refMM !== 'custom') {
+      // Saved value doesn't match any option — show custom field
+      refSel.value = 'custom';
+      document.getElementById('cfg-ref-mm').value = c.refMM;
+      document.getElementById('cfg-ref-custom').style.display = 'block';
     }
   }
   document.getElementById('cfg-iris').value = c.irisMM || 11.7;
   CFG.irisMM = parseFloat(c.irisMM || 11.7);
-  CFG.refMM  = parseFloat(refSel.value);
+  CFG.refMM  = getRefMM();
   // Show camera context info
   var info = '';
   if (location.protocol === 'file:') info = '⚠️ Archivo local — cámara puede no funcionar. Abre desde internet (HTTPS).';
@@ -1791,14 +1818,16 @@ function loadCfg() {
   document.getElementById('cfg-cam-info').textContent = info;
 }
 function saveCfg() {
+  var refMM = getRefMM();
+  if (!refMM || isNaN(refMM)) { toast('Ingrese una medida de referencia válida','err'); return; }
   var cfg = {
     opticaName: document.getElementById('cfg-name').value,
-    refMM:  document.getElementById('cfg-ref').value,
+    refMM:  refMM,
     irisMM: document.getElementById('cfg-iris').value
   };
   DB.sC(cfg);
   CFG.irisMM = parseFloat(cfg.irisMM);
-  CFG.refMM  = parseFloat(cfg.refMM);
+  CFG.refMM  = refMM;
   toast('Configuración guardada ✓','ok');
 }
 function clearAll() {
@@ -1831,7 +1860,7 @@ function esc(s) {
   try {
     var c = DB.cfg();
     CFG.irisMM = parseFloat(c.irisMM || 11.7);
-    CFG.refMM  = parseFloat(c.refMM  || 85.6);
+    CFG.refMM  = parseFloat(c.refMM  || 54);
     S.result   = makeResult();
     renderPats();
     // Load AI in background after 1s — uses script tag, no import()
