@@ -826,8 +826,10 @@ function beginCam(patientId) {
   startCam();
 }
 function startSideMode() {
-  S.camMode = 'side';
-  S.measureMode = 'side';
+  S.camMode       = 'side';
+  S.measureMode   = 'side';
+  _sideLiveScanTs = 0;
+  _sideLiveEdge   = null;
   go('s-cam');
   updateModeBtns();
   startCam();
@@ -1039,6 +1041,15 @@ function camLoop(ts) {
       S.sendingFM = true;
       faceMeshInst.send({image: vidEl}).catch(function() { S.sendingFM = false; });
     }
+  } else if (S.measureMode === 'side') {
+    // Side mode — pixel-scan live overlay for pantoscopic angle
+    document.getElementById('dp-overlay').style.display = 'none';
+    drawSideLiveOverlay();
+    document.getElementById('ai-badge').style.display = 'block';
+    setAIBadge(_sideLiveEdge ? 'ok' : 'seek',
+      _sideLiveEdge ? '✅ Marco detectado — ¡tome la foto!' : '🔍 Buscando marco lateral…');
+    document.getElementById('si').classList.remove('dim');
+    document.getElementById('shutter').disabled = false;
   } else {
     // Manual mode — shutter always enabled once camera starts
     document.getElementById('dp-overlay').style.display = 'none';
@@ -1147,6 +1158,110 @@ function autoDetectFrameBottom(ctx, cx, cy, irisRad) {
   return startY + exit;
 }
 
+/* ── Auto-detect pantoscopic angle from side photo ───────────────────────
+   Scans the canvas for the front edge of the glasses frame (near-vertical
+   dark line). Uses linear regression on detected edge points to compute
+   the tilt angle = pantoscopic angle.
+   Returns { pantoAngle, edgePts } or null.                              */
+function lrSlopeXY(pts) {
+  // Regress x on y: x = a + b·y  →  b = dx/dy
+  var n = pts.length, sx=0, sy=0, sxy=0, sy2=0;
+  pts.forEach(function(p){ sx+=p.x; sy+=p.y; sxy+=p.x*p.y; sy2+=p.y*p.y; });
+  var d = n*sy2 - sy*sy;
+  return d === 0 ? 0 : (n*sxy - sx*sy) / d;
+}
+
+function autoDetectSide(canvas) {
+  var cw = canvas.width, ch = canvas.height;
+  var ctx = canvas.getContext('2d');
+  var yMin = Math.round(ch * 0.18), yMax = Math.round(ch * 0.82);
+  var xMin = Math.round(cw * 0.1),  xMax = Math.round(cw * 0.80);
+  var scanW = xMax - xMin;
+  var edgePts = [], yStep = Math.round((yMax - yMin) / 14);
+  if (yStep < 2 || scanW < 10) return null;
+  for (var y = yMin; y < yMax; y += yStep) {
+    var row = ctx.getImageData(xMin, y, scanW, 1).data;
+    var lums = [];
+    for (var i = 0; i < scanW; i++) {
+      var idx = i*4;
+      lums.push(0.299*row[idx] + 0.587*row[idx+1] + 0.114*row[idx+2]);
+    }
+    // 3-point smoothing
+    var sm = lums.map(function(v, i) {
+      return (lums[Math.max(0,i-1)] + v + lums[Math.min(lums.length-1,i+1)]) / 3;
+    });
+    // Find bright→dark transition (front face of lens frame)
+    for (var j = 4; j < sm.length - 4; j++) {
+      var before = (sm[j-1]+sm[j-2]+sm[j-3]+sm[j-4]) / 4;
+      var after  = (sm[j]  +sm[j+1]+sm[j+2]+sm[j+3]) / 4;
+      if (before > 88 && after < 62) {
+        edgePts.push({ x: xMin + j, y: y });
+        break;
+      }
+    }
+  }
+  if (edgePts.length < 4) return null;
+  var slope = lrSlopeXY(edgePts); // dx/dy
+  var angle = +(Math.atan(Math.abs(slope)) * 180 / Math.PI).toFixed(1);
+  if (angle > 30) return null; // unrealistic value
+  return { pantoAngle: angle, edgePts: edgePts };
+}
+
+/* Side-mode live overlay: shows the detected frame edge on the camera feed */
+function drawSideLiveOverlay() {
+  var now = performance.now();
+  if (now - _sideLiveScanTs > 500) {
+    _sideLiveScanTs = now;
+    var tmp = document.createElement('canvas');
+    tmp.width = camCanvas.width; tmp.height = camCanvas.height;
+    tmp.getContext('2d').drawImage(vidEl, 0, 0, camCanvas.width, camCanvas.height);
+    _sideLiveEdge = autoDetectSide(tmp);
+  }
+  if (!_sideLiveEdge) return;
+  var pts = _sideLiveEdge.edgePts;
+  if (pts.length < 2) return;
+  // Draw detected edge points
+  camCtx.strokeStyle = '#ffd166'; camCtx.lineWidth = 2;
+  camCtx.beginPath();
+  camCtx.moveTo(pts[0].x, pts[0].y);
+  for (var i = 1; i < pts.length; i++) camCtx.lineTo(pts[i].x, pts[i].y);
+  camCtx.stroke();
+  // Draw dots at each sample
+  pts.forEach(function(p) {
+    camCtx.beginPath(); camCtx.arc(p.x, p.y, 4, 0, Math.PI*2);
+    camCtx.fillStyle = '#ffd166'; camCtx.fill();
+  });
+  // Angle label
+  camCtx.font = 'bold 14px sans-serif'; camCtx.fillStyle = '#ffd166';
+  camCtx.fillText('Panto ≈ ' + _sideLiveEdge.pantoAngle + '°', pts[0].x + 12, pts[0].y - 6);
+}
+
+/* Fully automatic side capture */
+function captureSideAuto() {
+  if (navigator.vibrate) navigator.vibrate([30,20,30]);
+  var snap = document.createElement('canvas');
+  snap.width = camCanvas.width; snap.height = camCanvas.height;
+  snap.getContext('2d').drawImage(camCanvas, 0, 0);
+  S.photo = snap.toDataURL('image/jpeg', 0.92);
+  var res = autoDetectSide(snap);
+  if (res) {
+    S.result.pantoAngle = res.pantoAngle;
+    S.result.usedAI     = true;
+    S.result.date       = new Date().toISOString();
+    _sideLiveEdge = null;
+    stopCam();
+    go('s-results');
+    toast('🤖 Pantoscópico: ' + res.pantoAngle + '°', 'ok');
+  } else {
+    // Fallback: show manual marking for side steps
+    toast('No se detectó el marco — marque los puntos', 'warn');
+    S.markMode = 'side';
+    _sideLiveEdge = null;
+    stopCam();
+    initMarking();
+  }
+}
+
 function drawHeightAIOverlay(lm, ox, oy, dw, dh) {
   if (lm.length <= 476) return;
   // Reference anatomical point (pupil center or lower eyelid)
@@ -1253,7 +1368,11 @@ function onShutter() {
   if (S.measureMode === 'ai') {
     if (S.heightMode) captureAIHeightAuto();  // altura completamente automática
     else captureAI();                          // DP con IA
-  } else captureForManual();
+  } else if (S.measureMode === 'side') {
+    captureSideAuto();                         // lateral: panto automático
+  } else {
+    captureForManual();
+  }
 }
 function captureAI() {
   if (!S.faceOk || !S.smoothedLM) { toast('No se detectó ningún rostro','err'); return; }
@@ -1462,9 +1581,13 @@ var HEIGHT_TYPE_LABEL = {
   bifocal_invis: 'Bifocal Invisible'
 };
 
-// Live frame-bottom scan state
+// Live frame-bottom scan state (height mode)
 var _heightLiveScanTs = 0;
 var _heightLiveBottoms = null; // { botR, botL } canvas y-coords or null
+
+// Live side-scan state
+var _sideLiveScanTs = 0;
+var _sideLiveEdge   = null;   // { pts[], pantoAngle } or null
 
 var mkCanvas = document.getElementById('mark-canvas');
 var mkCtx    = mkCanvas.getContext('2d');
