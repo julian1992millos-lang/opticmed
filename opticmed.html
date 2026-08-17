@@ -520,6 +520,8 @@ var S = {
   photo: null,
   markMode: 'front',
   heightMode: null,   // 'multifocal' | 'bifocal_flap' | 'bifocal_invis' | null
+  heightAI: false,    // true when AI captured anatomical points for height
+  aiHeightPts: null,  // { pod:{xn,yn}, poi:{xn,yn} } normalized coords
   distOk: false,      // true when user is at correct measurement distance
   markers: [], markStep: 0,
   scaleMMpx: null,
@@ -973,6 +975,8 @@ function stopCam() {
   S.faceOk = false;
   S.sendingFM = false;
   S.distOk = false;
+  // Note: do NOT clear heightMode/heightAI/aiHeightPts here —
+  // they are needed by initMarking() which runs after stopCam()
 }
 
 function resizeCamCanvas() {
@@ -1003,9 +1007,15 @@ function camLoop(ts) {
     // Draw overlay from last smoothed landmarks
     if (S.smoothedLM && S.faceOk) {
       drawFaceOverlay(S.smoothedLM, ox, oy, dw, dh);
-      computeAIPD(S.smoothedLM, ox, oy, dw, dh);
-      setAIBadge('ok', '✅ Rostro detectado');
-      document.getElementById('dp-overlay').style.display = 'block';
+      if (S.heightMode) {
+        drawHeightAIOverlay(S.smoothedLM, ox, oy, dw, dh);
+        document.getElementById('dp-overlay').style.display = 'none';
+        setAIBadge('ok', '✅ Punto detectado — tome la foto');
+      } else {
+        computeAIPD(S.smoothedLM, ox, oy, dw, dh);
+        setAIBadge('ok', '✅ Rostro detectado');
+        document.getElementById('dp-overlay').style.display = 'block';
+      }
       document.getElementById('si').classList.remove('dim');
       document.getElementById('shutter').disabled = false;
     } else {
@@ -1039,6 +1049,8 @@ function camLoop(ts) {
 var IRIS_R_CTR=468, IRIS_R_R=469, IRIS_R_L=471;
 var IRIS_L_CTR=473, IRIS_L_R=474, IRIS_L_L=476;
 var NOSE_BR=168;
+// Lower eyelid center landmarks (MediaPipe FaceMesh)
+var EYELID_R=145, EYELID_L=374;
 var EYE_CONN = [
   [33,7],[7,163],[163,144],[144,145],[145,153],[153,154],[154,155],[155,133],
   [33,246],[246,161],[161,160],[160,159],[159,158],[158,157],[157,173],[173,133],
@@ -1090,6 +1102,40 @@ function drawFaceOverlay(lm, ox, oy, dw, dh) {
   }
 }
 
+function drawHeightAIOverlay(lm, ox, oy, dw, dh) {
+  if (lm.length <= 476) return;
+  var ptR, ptL, color;
+  if (S.heightMode === 'bifocal_flap') {
+    ptR = px(lm, EYELID_R, ox, oy, dw, dh);
+    ptL = px(lm, EYELID_L, ox, oy, dw, dh);
+    color = '#ef476f';
+  } else {
+    ptR = px(lm, IRIS_R_CTR, ox, oy, dw, dh);
+    ptL = px(lm, IRIS_L_CTR, ox, oy, dw, dh);
+    color = '#00c6e0';
+  }
+  // Crosshairs at reference points
+  cross(ptR.x, ptR.y, 14, color);
+  cross(ptL.x, ptL.y, 14, color);
+  // Filled dot
+  camCtx.beginPath(); camCtx.arc(ptR.x, ptR.y, 5, 0, Math.PI*2);
+  camCtx.fillStyle = color; camCtx.fill();
+  camCtx.beginPath(); camCtx.arc(ptL.x, ptL.y, 5, 0, Math.PI*2);
+  camCtx.fillStyle = color; camCtx.fill();
+  // Horizontal guide lines across full width
+  camCtx.setLineDash([5,5]);
+  camCtx.beginPath(); camCtx.moveTo(0,ptR.y); camCtx.lineTo(camCanvas.width,ptR.y);
+  camCtx.strokeStyle = color+'88'; camCtx.lineWidth = 1.5; camCtx.stroke();
+  camCtx.beginPath(); camCtx.moveTo(0,ptL.y); camCtx.lineTo(camCanvas.width,ptL.y);
+  camCtx.stroke();
+  camCtx.setLineDash([]);
+  // Labels
+  camCtx.font = 'bold 11px sans-serif';
+  camCtx.fillStyle = color;
+  camCtx.fillText(S.heightMode==='bifocal_flap'?'Párpado OD':'Pupila OD', ptR.x+16, ptR.y-8);
+  camCtx.fillText(S.heightMode==='bifocal_flap'?'Párpado OI':'Pupila OI', ptL.x+16, ptL.y-8);
+}
+
 function cross(x, y, r, c) {
   camCtx.strokeStyle = c; camCtx.lineWidth = 2;
   camCtx.beginPath(); camCtx.moveTo(x-r,y); camCtx.lineTo(x+r,y); camCtx.stroke();
@@ -1118,8 +1164,10 @@ function computeAIPD(lm, ox, oy, dw, dh) {
    SHUTTER & CONTROLS
 ══════════════════════════════════════════════════════ */
 function onShutter() {
-  if (S.measureMode === 'ai') captureAI();
-  else captureForManual();
+  if (S.measureMode === 'ai') {
+    if (S.heightMode) captureAIHeight();  // altura con IA
+    else captureAI();                      // DP con IA
+  } else captureForManual();
 }
 function captureAI() {
   if (!S.faceOk || !S.smoothedLM) { toast('No se detectó ningún rostro','err'); return; }
@@ -1136,6 +1184,44 @@ function captureAI() {
   stopCam();
   go('s-results');
 }
+function captureAIHeight() {
+  if (!S.faceOk || !S.smoothedLM) { toast('No se detectó ningún rostro','err'); return; }
+  var lm = S.smoothedLM;
+  if (lm.length <= 476) { toast('IA necesita más landmarks — espere un momento','err'); return; }
+  if (navigator.vibrate) navigator.vibrate([30,20,30]);
+  // Compute canvas coords of anatomical reference points
+  var vw=vidEl.videoWidth, vh=vidEl.videoHeight;
+  var cw=camCanvas.width,  ch=camCanvas.height;
+  var sc=Math.max(cw/vw, ch/vh);
+  var dw=vw*sc, dh=vh*sc, ox=(cw-dw)/2, oy=(ch-dh)/2;
+  var pod_c, poi_c;
+  if (S.heightMode === 'bifocal_flap') {
+    pod_c = px(lm, EYELID_R, ox, oy, dw, dh);
+    poi_c = px(lm, EYELID_L, ox, oy, dw, dh);
+  } else {
+    pod_c = px(lm, IRIS_R_CTR, ox, oy, dw, dh);
+    poi_c = px(lm, IRIS_L_CTR, ox, oy, dw, dh);
+  }
+  // Store normalized coords (robust to canvas resize later)
+  S.aiHeightPts = {
+    pod: { xn: pod_c.x/cw, yn: pod_c.y/ch,
+           lbl: S.heightMode==='bifocal_flap' ? '🤖 Párpado OD' : '🤖 Pupila OD',
+           color: S.heightMode==='bifocal_flap' ? '#ef476f' : '#00c6e0' },
+    poi: { xn: poi_c.x/cw, yn: poi_c.y/ch,
+           lbl: S.heightMode==='bifocal_flap' ? '🤖 Párpado OI' : '🤖 Pupila OI',
+           color: S.heightMode==='bifocal_flap' ? '#ef476f' : '#0077b6' }
+  };
+  S.heightAI = true;
+  // Capture photo
+  var snap = document.createElement('canvas');
+  snap.width = cw; snap.height = ch;
+  snap.getContext('2d').drawImage(camCanvas, 0, 0);
+  S.photo = snap.toDataURL('image/jpeg', 0.92);
+  S.markMode = 'height';
+  stopCam();
+  initMarking();
+}
+
 function captureForManual() {
   if (navigator.vibrate) navigator.vibrate(30);
   var snap = document.createElement('canvas');
@@ -1223,6 +1309,28 @@ var HEIGHT_STEPS_EYELID = [
    desc:'Toque el punto más bajo del aro del lente IZQUIERDO (borde interior inferior).',color:'#06d6a0'}
 ];
 
+// AI-height steps: only scale ref + frame bottom (anatomical pts pre-placed by AI)
+var HEIGHT_AI_STEPS_PUPIL = [
+  {id:'r1',  lbl:'Ref 1',    title:'📍 Referencia — Borde Izquierdo',
+   desc:'Toque el borde izquierdo de la tarjeta de crédito bajo la nariz.',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',    title:'📍 Referencia — Borde Derecho',
+   desc:'Toque el borde derecho de la tarjeta para establecer la escala.',color:'#ffd166'},
+  {id:'bod', lbl:'Marco↓ OD',title:'⬇️ Borde Inferior Marco — OD',
+   desc:'Toque el punto más bajo del aro del lente DERECHO (borde interior inferior).',color:'#06d6a0'},
+  {id:'boi', lbl:'Marco↓ OI',title:'⬇️ Borde Inferior Marco — OI',
+   desc:'Toque el punto más bajo del aro del lente IZQUIERDO (borde interior inferior).',color:'#06d6a0'}
+];
+var HEIGHT_AI_STEPS_EYELID = [
+  {id:'r1',  lbl:'Ref 1',    title:'📍 Referencia — Borde Izquierdo',
+   desc:'Toque el borde izquierdo de la tarjeta de crédito bajo la nariz.',color:'#ffd166'},
+  {id:'r2',  lbl:'Ref 2',    title:'📍 Referencia — Borde Derecho',
+   desc:'Toque el borde derecho de la tarjeta para establecer la escala.',color:'#ffd166'},
+  {id:'bod', lbl:'Marco↓ OD',title:'⬇️ Borde Inferior Marco — OD',
+   desc:'Toque el punto más bajo del aro del lente DERECHO (borde interior inferior).',color:'#06d6a0'},
+  {id:'boi', lbl:'Marco↓ OI',title:'⬇️ Borde Inferior Marco — OI',
+   desc:'Toque el punto más bajo del aro del lente IZQUIERDO (borde interior inferior).',color:'#06d6a0'}
+];
+
 var HEIGHT_TYPE_LABEL = {
   multifocal: 'Multifocal',
   bifocal_flap: 'Bifocal Flap Top',
@@ -1236,8 +1344,11 @@ var mkIx=0, mkIy=0, mkIw=0, mkIh=0;
 
 function getSteps() {
   if (S.markMode === 'side') return SIDE_STEPS;
-  if (S.markMode === 'height')
+  if (S.markMode === 'height') {
+    if (S.heightAI)
+      return S.heightMode === 'bifocal_flap' ? HEIGHT_AI_STEPS_EYELID : HEIGHT_AI_STEPS_PUPIL;
     return S.heightMode === 'bifocal_flap' ? HEIGHT_STEPS_EYELID : HEIGHT_STEPS_PUPIL;
+  }
   return FRONT_STEPS;
 }
 
@@ -1260,6 +1371,18 @@ function initMarking() {
       if (ir > cr) { mkIw = mkCanvas.width;  mkIh = mkCanvas.width/ir; }
       else          { mkIh = mkCanvas.height; mkIw = mkCanvas.height*ir; }
       mkIx = (mkCanvas.width-mkIw)/2; mkIy = (mkCanvas.height-mkIh)/2;
+      // Pre-place AI-detected anatomical points (pod/poi)
+      if (S.aiHeightPts && S.markMode === 'height') {
+        var pts = S.aiHeightPts;
+        // Transform normalized camCanvas coords → mkCanvas coords
+        var toMk = function(n) {
+          return { x: mkIx + n.xn*mkIw, y: mkIy + n.yn*mkIh };
+        };
+        var pm = toMk(pts.pod), pi2 = toMk(pts.poi);
+        S.markers.push({id:'pod', x:pm.x,  y:pm.y,  color:pts.pod.color, si:-1, lbl:pts.pod.lbl});
+        S.markers.push({id:'poi', x:pi2.x, y:pi2.y, color:pts.poi.color, si:-1, lbl:pts.poi.lbl});
+        S.aiHeightPts = null; // consumed
+      }
       redrawMk();
     };
     mkImg.src = S.photo;
@@ -1317,6 +1440,8 @@ function markDone() {
   if (S.markMode === 'height') {
     S.saved = false;
     S.heightMode = null; // limpiar para próxima medición
+    S.heightAI   = false;
+    S.aiHeightPts = null;
   }
   go('s-results');
 }
@@ -1342,7 +1467,7 @@ function redrawMk() {
     mkCtx.beginPath(); mkCtx.arc(m.x,m.y,18,0,Math.PI*2); mkCtx.fillStyle=m.color+'30'; mkCtx.fill();
     mkCtx.beginPath(); mkCtx.arc(m.x,m.y,6,0,Math.PI*2); mkCtx.fillStyle=m.color; mkCtx.fill();
     mkCtx.strokeStyle='#fff'; mkCtx.lineWidth=1.5; mkCtx.stroke();
-    var lbl = steps[m.si] ? steps[m.si].lbl : '';
+    var lbl = m.lbl || (steps[m.si] ? steps[m.si].lbl : '');
     mkCtx.font = 'bold 11px sans-serif';
     mkCtx.lineWidth = 3; mkCtx.strokeStyle = 'rgba(0,0,0,.8)';
     mkCtx.strokeText(lbl, m.x+10, m.y-8);
@@ -1498,9 +1623,12 @@ function closeHeightModal() {
 }
 function startHeightMeasurement(type) {
   closeHeightModal();
-  S.heightMode  = type;
-  S.camMode     = 'front';
-  S.measureMode = 'manual'; // SIEMPRE manual: la altura requiere marcar puntos
+  S.heightMode    = type;
+  S.heightAI      = false;
+  S.aiHeightPts   = null;
+  S.camMode       = 'front';
+  // Use AI if loaded — FaceMesh detects pupil/eyelid automatically
+  S.measureMode   = S.aiReady ? 'ai' : 'manual';
   if (!S.result) S.result = makeResult();
   go('s-cam');
   updateModeBtns();
