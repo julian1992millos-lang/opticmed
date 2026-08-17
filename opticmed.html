@@ -1010,7 +1010,8 @@ function camLoop(ts) {
       if (S.heightMode) {
         drawHeightAIOverlay(S.smoothedLM, ox, oy, dw, dh);
         document.getElementById('dp-overlay').style.display = 'none';
-        setAIBadge('ok', '✅ Punto detectado — tome la foto');
+        setAIBadge(_heightLiveBottoms ? 'ok' : 'seek',
+          _heightLiveBottoms ? '✅ Montura detectada — ¡tome la foto!' : '🔍 Buscando borde de montura…');
       } else {
         computeAIPD(S.smoothedLM, ox, oy, dw, dh);
         setAIBadge('ok', '✅ Rostro detectado');
@@ -1102,8 +1103,46 @@ function drawFaceOverlay(lm, ox, oy, dw, dh) {
   }
 }
 
+/* ── Live pixel scan: find glasses-frame bottom edge ─────────────────────
+   Scans downward from below the iris center.
+   Returns canvas y-coord of frame exit (bright→dark→bright) or null.  */
+function autoDetectFrameBottom(ctx, cx, cy, irisRad) {
+  var cw = ctx.canvas.width, ch = ctx.canvas.height;
+  var startY = Math.round(cy + irisRad * 1.3);
+  var halfW  = Math.round(irisRad * 0.8);
+  var x0 = Math.max(0, Math.round(cx - halfW));
+  var x1 = Math.min(cw - 1, Math.round(cx + halfW));
+  var stripW = x1 - x0 + 1;
+  var scanH  = Math.min(ch - startY, Math.round(irisRad * 6));
+  if (stripW <= 0 || scanH <= 0 || startY >= ch) return null;
+  var data = ctx.getImageData(x0, startY, stripW, scanH).data;
+  var rows = [];
+  for (var row = 0; row < scanH; row++) {
+    var lum = 0;
+    for (var col = 0; col < stripW; col++) {
+      var i = (row * stripW + col) * 4;
+      lum += 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+    }
+    rows.push(lum / stripW);
+  }
+  // Find bright→dark transition (entering frame material)
+  var entry = -1;
+  for (var r = 2; r < rows.length; r++) {
+    if (rows[r] < 75 && rows[r-1] >= 75) { entry = r; break; }
+  }
+  if (entry < 0) return null;
+  // Find dark→bright transition (bottom edge of frame)
+  var exit = -1;
+  for (var r2 = entry + 1; r2 < rows.length; r2++) {
+    if (rows[r2] >= 100 && rows[r2-1] < 100) { exit = r2; break; }
+  }
+  if (exit < 0) return null;
+  return startY + exit;
+}
+
 function drawHeightAIOverlay(lm, ox, oy, dw, dh) {
   if (lm.length <= 476) return;
+  // Reference anatomical point (pupil center or lower eyelid)
   var ptR, ptL, color;
   if (S.heightMode === 'bifocal_flap') {
     ptR = px(lm, EYELID_R, ox, oy, dw, dh);
@@ -1114,24 +1153,64 @@ function drawHeightAIOverlay(lm, ox, oy, dw, dh) {
     ptL = px(lm, IRIS_L_CTR, ox, oy, dw, dh);
     color = '#00c6e0';
   }
-  // Crosshairs at reference points
-  cross(ptR.x, ptR.y, 14, color);
-  cross(ptL.x, ptL.y, 14, color);
-  // Filled dot
-  camCtx.beginPath(); camCtx.arc(ptR.x, ptR.y, 5, 0, Math.PI*2);
-  camCtx.fillStyle = color; camCtx.fill();
-  camCtx.beginPath(); camCtx.arc(ptL.x, ptL.y, 5, 0, Math.PI*2);
-  camCtx.fillStyle = color; camCtx.fill();
-  // Horizontal guide lines across full width
+  // Iris data for scale + scan radius
+  var cR = px(lm, IRIS_R_CTR, ox, oy, dw, dh), rR = px(lm, IRIS_R_R, ox, oy, dw, dh), lR_ = px(lm, IRIS_R_L, ox, oy, dw, dh);
+  var cL = px(lm, IRIS_L_CTR, ox, oy, dw, dh), rL = px(lm, IRIS_L_R, ox, oy, dw, dh), lL_ = px(lm, IRIS_L_L, ox, oy, dw, dh);
+  var diamR = d2(rR, lR_), diamL = d2(rL, lL_);
+
+  // Throttled live frame-bottom scan (every 500 ms)
+  var now = performance.now();
+  if (now - _heightLiveScanTs > 500 && diamR > 4 && diamL > 4) {
+    _heightLiveScanTs = now;
+    var tmp = document.createElement('canvas');
+    tmp.width = camCanvas.width; tmp.height = camCanvas.height;
+    var tc = tmp.getContext('2d');
+    tc.drawImage(vidEl, ox, oy, dw, dh);
+    var bR = autoDetectFrameBottom(tc, cR.x, cR.y, diamR/2);
+    var bL = autoDetectFrameBottom(tc, cL.x, cL.y, diamL/2);
+    _heightLiveBottoms = (bR !== null && bL !== null) ? {botR:bR, botL:bL, diamR:diamR, diamL:diamL, ptR:ptR, ptL:ptL} : null;
+  }
+
+  // Crosshairs + dots at anatomical reference
+  cross(ptR.x, ptR.y, 14, color); cross(ptL.x, ptL.y, 14, color);
+  camCtx.beginPath(); camCtx.arc(ptR.x, ptR.y, 5, 0, Math.PI*2); camCtx.fillStyle=color; camCtx.fill();
+  camCtx.beginPath(); camCtx.arc(ptL.x, ptL.y, 5, 0, Math.PI*2); camCtx.fillStyle=color; camCtx.fill();
+  // Dashed horizontal guides at reference height
   camCtx.setLineDash([5,5]);
   camCtx.beginPath(); camCtx.moveTo(0,ptR.y); camCtx.lineTo(camCanvas.width,ptR.y);
   camCtx.strokeStyle = color+'88'; camCtx.lineWidth = 1.5; camCtx.stroke();
-  camCtx.beginPath(); camCtx.moveTo(0,ptL.y); camCtx.lineTo(camCanvas.width,ptL.y);
-  camCtx.stroke();
+  camCtx.beginPath(); camCtx.moveTo(0,ptL.y); camCtx.lineTo(camCanvas.width,ptL.y); camCtx.stroke();
   camCtx.setLineDash([]);
-  // Labels
-  camCtx.font = 'bold 11px sans-serif';
-  camCtx.fillStyle = color;
+
+  // Detected frame-bottom overlay
+  if (_heightLiveBottoms) {
+    var lb = _heightLiveBottoms;
+    var fc = '#ffd166';
+    // Bottom-edge horizontal lines
+    camCtx.setLineDash([6,3]);
+    camCtx.strokeStyle = fc+'cc'; camCtx.lineWidth = 2;
+    camCtx.beginPath(); camCtx.moveTo(0, lb.botR); camCtx.lineTo(camCanvas.width, lb.botR); camCtx.stroke();
+    camCtx.beginPath(); camCtx.moveTo(0, lb.botL); camCtx.lineTo(camCanvas.width, lb.botL); camCtx.stroke();
+    camCtx.setLineDash([]);
+    // Vertical measurement arrows
+    camCtx.strokeStyle = fc; camCtx.lineWidth = 1.5;
+    camCtx.beginPath(); camCtx.moveTo(lb.ptR.x, lb.ptR.y); camCtx.lineTo(lb.ptR.x, lb.botR); camCtx.stroke();
+    camCtx.beginPath(); camCtx.moveTo(lb.ptL.x, lb.ptL.y); camCtx.lineTo(lb.ptL.x, lb.botL); camCtx.stroke();
+    // Live height estimates
+    var scR = CFG.irisMM / lb.diamR, scL = CFG.irisMM / lb.diamL;
+    var estOD = +(Math.abs(lb.ptR.y - lb.botR) * scR).toFixed(1);
+    var estOI = +(Math.abs(lb.ptL.y - lb.botL) * scL).toFixed(1);
+    camCtx.font = 'bold 13px sans-serif'; camCtx.fillStyle = fc;
+    var midR = (lb.ptR.y + lb.botR)/2, midL = (lb.ptL.y + lb.botL)/2;
+    camCtx.fillText(estOD+' mm', lb.ptR.x + 8, midR + 5);
+    camCtx.fillText(estOI+' mm', lb.ptL.x + 8, midL + 5);
+    camCtx.font = 'bold 10px sans-serif';
+    camCtx.fillText('Marco OD', 6, lb.botR - 4);
+    camCtx.fillText('Marco OI', camCanvas.width - 66, lb.botL - 4);
+  }
+
+  // Labels for reference points
+  camCtx.font = 'bold 11px sans-serif'; camCtx.fillStyle = color;
   camCtx.fillText(S.heightMode==='bifocal_flap'?'Párpado OD':'Pupila OD', ptR.x+16, ptR.y-8);
   camCtx.fillText(S.heightMode==='bifocal_flap'?'Párpado OI':'Pupila OI', ptL.x+16, ptL.y-8);
 }
@@ -1165,8 +1244,8 @@ function computeAIPD(lm, ox, oy, dw, dh) {
 ══════════════════════════════════════════════════════ */
 function onShutter() {
   if (S.measureMode === 'ai') {
-    if (S.heightMode) captureAIHeight();  // altura con IA
-    else captureAI();                      // DP con IA
+    if (S.heightMode) captureAIHeightAuto();  // altura completamente automática
+    else captureAI();                          // DP con IA
   } else captureForManual();
 }
 function captureAI() {
@@ -1184,42 +1263,81 @@ function captureAI() {
   stopCam();
   go('s-results');
 }
-function captureAIHeight() {
+/* ── Fully automatic height capture ──────────────────────────────────────
+   1. Uses AI to detect anatomical reference (pupil/eyelid center).
+   2. Uses pixel scanning to find glasses-frame bottom edge.
+   3. On SUCCESS → computes heights, goes straight to s-results (no marking).
+   4. On FAILURE → falls back to 4-point semi-auto (AI pre-places top pts). */
+function captureAIHeightAuto() {
   if (!S.faceOk || !S.smoothedLM) { toast('No se detectó ningún rostro','err'); return; }
   var lm = S.smoothedLM;
   if (lm.length <= 476) { toast('IA necesita más landmarks — espere un momento','err'); return; }
   if (navigator.vibrate) navigator.vibrate([30,20,30]);
-  // Compute canvas coords of anatomical reference points
+
   var vw=vidEl.videoWidth, vh=vidEl.videoHeight;
   var cw=camCanvas.width,  ch=camCanvas.height;
   var sc=Math.max(cw/vw, ch/vh);
   var dw=vw*sc, dh=vh*sc, ox=(cw-dw)/2, oy=(ch-dh)/2;
-  var pod_c, poi_c;
-  if (S.heightMode === 'bifocal_flap') {
-    pod_c = px(lm, EYELID_R, ox, oy, dw, dh);
-    poi_c = px(lm, EYELID_L, ox, oy, dw, dh);
+
+  // Draw clean video frame (no FaceMesh overlays) to temp canvas for scanning
+  var tmp = document.createElement('canvas');
+  tmp.width = cw; tmp.height = ch;
+  var tc = tmp.getContext('2d');
+  tc.drawImage(vidEl, ox, oy, dw, dh);
+
+  // Iris landmarks
+  var cR = px(lm, IRIS_R_CTR, ox, oy, dw, dh), rR = px(lm, IRIS_R_R, ox, oy, dw, dh), lR_ = px(lm, IRIS_R_L, ox, oy, dw, dh);
+  var cL = px(lm, IRIS_L_CTR, ox, oy, dw, dh), rL = px(lm, IRIS_L_R, ox, oy, dw, dh), lL_ = px(lm, IRIS_L_L, ox, oy, dw, dh);
+  var diamR = d2(rR, lR_), diamL = d2(rL, lL_);
+
+  // Anatomical reference (pupil center or lower eyelid)
+  var refR = (S.heightMode === 'bifocal_flap') ? px(lm, EYELID_R, ox, oy, dw, dh) : cR;
+  var refL = (S.heightMode === 'bifocal_flap') ? px(lm, EYELID_L, ox, oy, dw, dh) : cL;
+
+  // Auto-detect glasses frame bottom for both eyes
+  var fBotR = autoDetectFrameBottom(tc, cR.x, cR.y, diamR/2);
+  var fBotL = autoDetectFrameBottom(tc, cL.x, cL.y, diamL/2);
+
+  if (fBotR !== null && fBotL !== null && diamR > 4 && diamL > 4) {
+    // ✅ Full auto success — compute and store results directly
+    var altOD = +(Math.abs(refR.y - fBotR) * (CFG.irisMM / diamR)).toFixed(1);
+    var altOI = +(Math.abs(refL.y - fBotL) * (CFG.irisMM / diamL)).toFixed(1);
+    S.result.altOD   = altOD;
+    S.result.altOI   = altOI;
+    S.result.altType = S.heightMode;
+    S.result.usedAI  = true;
+    S.result.date    = new Date().toISOString();
+    // Capture the live canvas frame (includes overlay showing what AI saw)
+    var snap = document.createElement('canvas');
+    snap.width = cw; snap.height = ch;
+    snap.getContext('2d').drawImage(camCanvas, 0, 0);
+    S.photo = snap.toDataURL('image/jpeg', 0.92);
+    S.heightMode = null; S.heightAI = false; S.aiHeightPts = null;
+    _heightLiveBottoms = null;
+    stopCam();
+    go('s-results');
+    toast('🤖 OD '+altOD+' mm · OI '+altOI+' mm', 'ok');
   } else {
-    pod_c = px(lm, IRIS_R_CTR, ox, oy, dw, dh);
-    poi_c = px(lm, IRIS_L_CTR, ox, oy, dw, dh);
+    // ⚠️ Frame not detected — fall back to 4-tap semi-auto marking
+    toast('No se detectó el borde de la montura — marque el borde inferior', 'warn');
+    S.aiHeightPts = {
+      pod: { xn: refR.x/cw, yn: refR.y/ch,
+             lbl: S.heightMode==='bifocal_flap' ? '🤖 Párpado OD' : '🤖 Pupila OD',
+             color: S.heightMode==='bifocal_flap' ? '#ef476f' : '#00c6e0' },
+      poi: { xn: refL.x/cw, yn: refL.y/ch,
+             lbl: S.heightMode==='bifocal_flap' ? '🤖 Párpado OI' : '🤖 Pupila OI',
+             color: S.heightMode==='bifocal_flap' ? '#ef476f' : '#0077b6' }
+    };
+    S.heightAI = true;
+    var snap = document.createElement('canvas');
+    snap.width = cw; snap.height = ch;
+    snap.getContext('2d').drawImage(camCanvas, 0, 0);
+    S.photo = snap.toDataURL('image/jpeg', 0.92);
+    S.markMode = 'height';
+    _heightLiveBottoms = null;
+    stopCam();
+    initMarking();
   }
-  // Store normalized coords (robust to canvas resize later)
-  S.aiHeightPts = {
-    pod: { xn: pod_c.x/cw, yn: pod_c.y/ch,
-           lbl: S.heightMode==='bifocal_flap' ? '🤖 Párpado OD' : '🤖 Pupila OD',
-           color: S.heightMode==='bifocal_flap' ? '#ef476f' : '#00c6e0' },
-    poi: { xn: poi_c.x/cw, yn: poi_c.y/ch,
-           lbl: S.heightMode==='bifocal_flap' ? '🤖 Párpado OI' : '🤖 Pupila OI',
-           color: S.heightMode==='bifocal_flap' ? '#ef476f' : '#0077b6' }
-  };
-  S.heightAI = true;
-  // Capture photo
-  var snap = document.createElement('canvas');
-  snap.width = cw; snap.height = ch;
-  snap.getContext('2d').drawImage(camCanvas, 0, 0);
-  S.photo = snap.toDataURL('image/jpeg', 0.92);
-  S.markMode = 'height';
-  stopCam();
-  initMarking();
 }
 
 function captureForManual() {
@@ -1336,6 +1454,10 @@ var HEIGHT_TYPE_LABEL = {
   bifocal_flap: 'Bifocal Flap Top',
   bifocal_invis: 'Bifocal Invisible'
 };
+
+// Live frame-bottom scan state
+var _heightLiveScanTs = 0;
+var _heightLiveBottoms = null; // { botR, botL } canvas y-coords or null
 
 var mkCanvas = document.getElementById('mark-canvas');
 var mkCtx    = mkCanvas.getContext('2d');
@@ -1627,8 +1749,10 @@ function startHeightMeasurement(type) {
   S.heightAI      = false;
   S.aiHeightPts   = null;
   S.camMode       = 'front';
-  // Use AI if loaded — FaceMesh detects pupil/eyelid automatically
+  // Use AI if loaded — fully automatic (frame scan + pupil/eyelid detection)
   S.measureMode   = S.aiReady ? 'ai' : 'manual';
+  _heightLiveScanTs  = 0;
+  _heightLiveBottoms = null;
   if (!S.result) S.result = makeResult();
   go('s-cam');
   updateModeBtns();
